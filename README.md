@@ -122,7 +122,9 @@ Most clients accept an `mcp.json` like:
 }
 ```
 
-When installed as an Agent Plugin, `mcp.json` is discovered at the plugin root and the server is launched via `command: ./dist/mcp/server.js` with `cwd: ${PLUGIN_ROOT}`. Set `CONTEXT_BRIDGE_STATE_DIR` if you need to choose the state location explicitly; otherwise the server derives a restrictive state directory from the config location and keeps it outside configured project roots.
+When installed as an Agent Plugin, `mcp.json` is discovered at the plugin root and launches `node ./dist/mcp/server.js` with `cwd: ${PLUGIN_ROOT}`. This avoids relying on executable mode bits and keeps command/argument behavior portable across MCP hosts. Set `CONTEXT_BRIDGE_STATE_DIR` if you need to choose the state location explicitly; otherwise the server derives a restrictive state directory from the config location and keeps it outside configured project roots.
+
+The same standard STDIO configuration can be used by Claude Code, Cursor, Codex, or another MCP host, including hosts that import an existing MCP entry. The core server has no host-specific behavior, authentication, headers, or network dependency. It emits MCP protocol data on stdout only; startup diagnostics and fatal errors go to stderr. Hosts should set an explicit config path and, when using relative `args`, a predictable `cwd`.
 
 ### Connect Hermes
 

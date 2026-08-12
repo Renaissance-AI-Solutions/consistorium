@@ -3,7 +3,8 @@
   "mcpServers": {
     "context-bridge": {
       "type": "stdio",
-      "command": "./dist/mcp/server.js",
+      "command": "node",
+      "args": ["./dist/mcp/server.js"],
       "cwd": "${PLUGIN_ROOT}"
     }
   }

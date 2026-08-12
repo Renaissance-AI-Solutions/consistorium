@@ -2,7 +2,7 @@
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "context-bridge",
   "version": "0.1.0",
-  "description": "Vendor-neutral, passive, local-first read-only development-context plane via MCP",
+  "description": "Vendor-neutral local task and handoff continuity with read-only repository observation via MCP",
   "author": {
     "name": "Context Bridge Contributors",
     "url": "https://github.com/context-bridge/context-bridge"

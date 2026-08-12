@@ -29,7 +29,7 @@ import {
   ListTasksInputSchema,
   UpsertTaskInputSchema,
 } from "../core/continuity.js";
-import { TOOL_DEFS } from "./tools.js";
+import { MCP_SERVER_INSTRUCTIONS, TOOL_DEFS } from "./tools.js";
 import type { ResolvedConfig } from "../core/types.js";
 
 // ---------------------------------------------------------------------------
@@ -166,6 +166,7 @@ async function main() {
         prompts: {},
         resources: {},
       },
+      instructions: MCP_SERVER_INSTRUCTIONS,
     }
   );
 

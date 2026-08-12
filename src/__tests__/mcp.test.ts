@@ -3,12 +3,35 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
 import { mkdtemp, cleanup, createGitRepo, commitFile, git } from "./helpers.js";
-import { TOOL_DEFS } from "../mcp/tools.js";
+import { MCP_SERVER_INSTRUCTIONS, TOOL_DEFS } from "../mcp/tools.js";
 import { ContextService } from "../core/context.js";
 import { SecurityPolicy } from "../core/security.js";
 import type { ResolvedConfig } from "../core/types.js";
 
 describe("MCP tool defs", () => {
+  it("provides self-contained, vendor-neutral initialize instructions", () => {
+    const first512 = MCP_SERVER_INSTRUCTIONS.slice(0, 512);
+    expect(first512).toContain("vendor-neutral");
+    expect(first512).toContain("passive and read-only");
+    expect(first512).toContain("context.project_snapshot");
+    expect(first512).toContain("context.handoff_list/handoff_get");
+    expect(MCP_SERVER_INSTRUCTIONS).toContain("evidence to verify");
+    expect(MCP_SERVER_INSTRUCTIONS).not.toMatch(/OpenAI|ChatGPT|Claude|Cursor|Hermes/);
+  });
+
+  it("ships a portable node-based Agent Plugins STDIO entry", async () => {
+    const manifest = JSON.parse(
+      await fs.promises.readFile(path.resolve("mcp.json"), "utf8")
+    ) as { mcpServers: Record<string, { type: string; command: string; args: string[]; cwd: string }> };
+    const entry = manifest.mcpServers["context-bridge"];
+    expect(entry).toEqual({
+      type: "stdio",
+      command: "node",
+      args: ["./dist/mcp/server.js"],
+      cwd: "${PLUGIN_ROOT}",
+    });
+  });
+
   it("exposes continuity and observability tools with valid inputSchemas", () => {
     expect(TOOL_DEFS.length).toBe(17);
     const names = TOOL_DEFS.map((t) => t.name);

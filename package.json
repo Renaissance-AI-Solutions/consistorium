@@ -1,0 +1,61 @@
+{
+  "name": "context-bridge",
+  "version": "0.1.0",
+  "description": "Vendor-neutral, passive, local-first, read-only development-context plane via MCP",
+  "type": "module",
+  "bin": {
+    "context-bridge": "./dist/cli/index.js"
+  },
+  "files": [
+    "dist",
+    "plugin.json",
+    "mcp.json",
+    "skills",
+    "LICENSE",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc --watch",
+    "start": "node dist/mcp/server.js",
+    "cli": "node dist/cli/index.js",
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint src --ext .ts",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:coverage": "vitest run --coverage",
+    "prepublishOnly": "npm run build"
+  },
+  "keywords": [
+    "mcp",
+    "agent-plugins",
+    "development-intelligence",
+    "git",
+    "worktree"
+  ],
+  "author": {
+    "name": "Context Bridge Contributors"
+  },
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/context-bridge/context-bridge"
+  },
+  "homepage": "https://github.com/context-bridge/context-bridge",
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.0",
+    "minimatch": "^10.0.1",
+    "yaml": "^2.7.0",
+    "zod": "^3.23.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.7.0",
+    "eslint": "^9.12.0",
+    "typescript": "^5.6.0",
+    "typescript-eslint": "^8.8.0",
+    "vitest": "^2.1.0"
+  }
+}

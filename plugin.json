@@ -1,0 +1,14 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "context-bridge",
+  "version": "0.1.0",
+  "description": "Vendor-neutral, passive, local-first read-only development-context plane via MCP",
+  "author": {
+    "name": "Context Bridge Contributors",
+    "url": "https://github.com/context-bridge/context-bridge"
+  },
+  "homepage": "https://github.com/context-bridge/context-bridge",
+  "repository": "https://github.com/context-bridge/context-bridge",
+  "license": "Apache-2.0",
+  "keywords": ["mcp", "git", "worktree", "development-intelligence", "agent-plugins"]
+}

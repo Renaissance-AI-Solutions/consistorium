@@ -1,0 +1,22 @@
+node_modules/
+dist/
+*.tsbuildinfo
+.DS_Store
+coverage/
+.env
+.env.*
+*.log
+tmp/
+fixtures-tmp/
+
+# Plugin data dir (not committed)
+/data/
+
+# Editor
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+Thumbs.db

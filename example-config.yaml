@@ -1,0 +1,41 @@
+# Context Bridge example configuration
+# Copy to ~/.config/context-bridge/config.yaml or set CONTEXT_BRIDGE_CONFIG
+# Only allowlisted projects are inspected — nothing else is accessible.
+
+version: 1
+
+projects:
+  - name: my-project
+    path: /Users/me/dev/my-project
+    context:
+      - TODO.md
+      - ROADMAP.md
+      - docs/**/*.md
+      - reports/**/*.md
+      - .context-bridge/**/*.md
+
+  # Add more projects as needed:
+  # - name: another-service
+  #   path: /Users/me/dev/another-service
+  #   context:
+  #     - README.md
+  #     - docs/**/*.md
+
+# Optional: generic session-artifact adapter
+# Lists bounded, redacted previews of files matching these globs.
+# Globs are relative to each project root (or absolute, but still policy-checked).
+sessionArtifacts:
+  patterns:
+    - reports/**/*.md
+    - .context-bridge/sessions/**/*.json
+    - sessions/**/*.md
+
+# Optional limits (defaults shown)
+# limits:
+#   maxFileSizeBytes: 262144    # 256 KiB for document reads
+#   maxDiffBytes: 131072        # 128 KiB for compare diffs
+#   maxSearchResults: 100
+
+# search:
+#   maxResults: 100
+#   maxFileSizeBytes: 524288    # 512 KiB per file scanned

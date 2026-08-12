@@ -49,6 +49,7 @@ const ConfigSchema = z.object({
       maxFileSizeBytes: z.number().int().min(1024).max(10 * 1024 * 1024).optional(),
       maxDiffBytes: z.number().int().min(1024).max(5 * 1024 * 1024).optional(),
       maxSearchResults: z.number().int().min(1).max(500).optional(),
+      maxWorktrees: z.number().int().min(1).max(DEFAULT_LIMITS.maxWorktrees).optional(),
     })
     .optional(),
 });
@@ -210,6 +211,7 @@ export async function resolveConfig(raw: RawConfig, configPath: string): Promise
       maxFileSizeBytes: raw.limits?.maxFileSizeBytes ?? DEFAULT_LIMITS.maxFileSizeBytes,
       maxDiffBytes: raw.limits?.maxDiffBytes ?? DEFAULT_LIMITS.maxDiffBytes,
       maxSearchResults: raw.limits?.maxSearchResults ?? DEFAULT_LIMITS.maxSearchResults,
+      maxWorktrees: raw.limits?.maxWorktrees ?? DEFAULT_LIMITS.maxWorktrees,
     },
     configPath: await safeRealpath(configPath),
     observedAt: new Date().toISOString(),
@@ -262,6 +264,7 @@ export function resolveConfigSync(raw: RawConfig, configPath: string): ResolvedC
       maxFileSizeBytes: raw.limits?.maxFileSizeBytes ?? DEFAULT_LIMITS.maxFileSizeBytes,
       maxDiffBytes: raw.limits?.maxDiffBytes ?? DEFAULT_LIMITS.maxDiffBytes,
       maxSearchResults: raw.limits?.maxSearchResults ?? DEFAULT_LIMITS.maxSearchResults,
+      maxWorktrees: raw.limits?.maxWorktrees ?? DEFAULT_LIMITS.maxWorktrees,
     },
     configPath: safeRealpathSync(configPath),
     observedAt: new Date().toISOString(),

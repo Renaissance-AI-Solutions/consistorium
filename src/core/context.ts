@@ -24,6 +24,11 @@ import * as docs from "../providers/documents.js";
 import * as search from "../providers/search.js";
 import { GenericSessionAdapter, NoopSessionAdapter, type SessionAdapter } from "../adapters/session.js";
 
+function isWithinProjectRoot(projectRoot: string, candidate: string): boolean {
+  const relative = path.relative(projectRoot, candidate);
+  return relative === "" || (relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative));
+}
+
 export class ContextService {
   private config: ResolvedConfig;
   private policy: SecurityPolicy;
@@ -52,11 +57,16 @@ export class ContextService {
   // Projects
   // -------------------------------------------------------------------------
 
-  async listProjects(): Promise<{ name: string; canonicalPath: string; isGitRepo: boolean }[]> {
-    const results: { name: string; canonicalPath: string; isGitRepo: boolean }[] = [];
+  async listProjects(): Promise<{
+    name: string;
+    canonicalPath: string;
+    isGitRepo: boolean;
+    gitAvailability: "available" | "not_git" | "unavailable";
+  }[]> {
+    const results: { name: string; canonicalPath: string; isGitRepo: boolean; gitAvailability: "available" | "not_git" | "unavailable" }[] = [];
     for (const p of this.config.projects) {
-      const isRepo = await git.isGitRepo(p.canonicalPath).catch(() => false);
-      results.push({ name: p.name, canonicalPath: p.canonicalPath, isGitRepo: isRepo });
+      const observed = await git.observeRepositoryState(p.canonicalPath, p.canonicalPath);
+      results.push({ name: p.name, canonicalPath: p.canonicalPath, isGitRepo: observed.availability === "available", gitAvailability: observed.availability });
     }
     return results;
   }
@@ -77,9 +87,14 @@ export class ContextService {
     const project = this.config.projects.find((p) => p.name === name);
     if (!project) throw Object.assign(new Error(`Project not found: ${name}`), { code: "NOT_FOUND" });
 
-    const isRepo = await git.isGitRepo(project.canonicalPath).catch(() => false);
-    const worktrees: WorktreeInfo[] = isRepo ? await git.listWorktrees(project.canonicalPath).catch(() => []) : [];
-    const gitState = isRepo ? await git.getRepoState(project.canonicalPath, opts?.recentLimit ?? 10).catch(() => null) : null;
+    const observedGit = await git.observeRepositoryState(project.canonicalPath, project.canonicalPath);
+    const isRepo = observedGit.availability === "available";
+    const worktrees: WorktreeInfo[] = isRepo
+      ? await git.listWorktrees(project.canonicalPath, project.canonicalPath, this.config.limits.maxWorktrees ?? DEFAULT_LIMITS.maxWorktrees).catch(() => [])
+      : [];
+    const gitState = observedGit.availability === "not_git"
+      ? null
+      : await git.getRepoState(project.canonicalPath, opts?.recentLimit ?? 10).catch(() => null);
 
     const contextDocs = await docs
       .discoverContextDocuments(project, this.policy)
@@ -106,7 +121,7 @@ export class ContextService {
     }
 
     return {
-      project: { name: project.name, canonicalPath: project.canonicalPath, isGitRepo: isRepo },
+      project: { name: project.name, canonicalPath: project.canonicalPath, isGitRepo: isRepo, gitAvailability: observedGit.availability },
       git: gitState ?? undefined,
       worktrees,
       contextDocuments: contextDocs,
@@ -127,35 +142,25 @@ export class ContextService {
   async listWorktrees(projectName: string): Promise<WorktreeInfo[]> {
     const project = this.config.projects.find((p) => p.name === projectName);
     if (!project) throw Object.assign(new Error(`Project not found: ${projectName}`), { code: "NOT_FOUND" });
-    return git.listWorktrees(project.canonicalPath);
+    return git.listWorktrees(project.canonicalPath, project.canonicalPath, this.config.limits.maxWorktrees ?? DEFAULT_LIMITS.maxWorktrees);
   }
 
   async worktreeSnapshot(projectName: string, worktreePath: string): Promise<WorktreeInfo> {
     const project = this.config.projects.find((p) => p.name === projectName);
     if (!project) throw Object.assign(new Error(`Project not found: ${projectName}`), { code: "NOT_FOUND" });
 
-    // First, list worktrees — they may reside outside the allowed root but are still
-    // legitimate children of an allowed repo (git worktree add can place them anywhere).
-    // So we check worktree membership before applying policy to allow discovered paths.
-    const worktrees = await git.listWorktrees(project.canonicalPath);
+    // First, list worktrees for metadata. A linked worktree may be discoverable in
+    // Git metadata while living outside the explicitly configured project root;
+    // discovery does not grant permission to inspect it.
+    const worktrees = await git.listWorktrees(project.canonicalPath, project.canonicalPath, this.config.limits.maxWorktrees ?? DEFAULT_LIMITS.maxWorktrees);
 
-    // Try to resolve requested path lexically/canonical without policy first for lookup
-    let lexCanonical: string | null = null;
-    try {
-      lexCanonical = await fs.promises.realpath(worktreePath).catch(() => path.normalize(path.resolve(worktreePath)));
-      lexCanonical = lexCanonical.replace(/\/+$/, "") || "/";
-      // Also try via SecurityPolicy realpath helper without deny — use helper
-      // If lexCanonical matches a known worktree, return immediately without policy check.
-      const foundByLex = worktrees.find(
-        (w) => w.canonicalPath === lexCanonical || w.path === lexCanonical || w.path === worktreePath
-      );
-      if (foundByLex) return foundByLex;
-    } catch { /* ignore */ }
-
-    // For non-worktree paths, enforce allowlist
+    // Enforce the allowlist before matching or inspecting any requested path.
     const canonicalRequested = await this.policy.canonicalizeAndCheck(worktreePath).catch(() => {
       throw Object.assign(new Error(`Invalid worktree path: ${worktreePath}`), { code: "PATH_ESCAPE" });
     });
+    if (!isWithinProjectRoot(project.canonicalPath, canonicalRequested)) {
+      throw Object.assign(new Error(`Worktree path is outside the explicitly configured project root: ${worktreePath}`), { code: "PATH_ESCAPE" });
+    }
 
     const found = worktrees.find(
       (w) => w.canonicalPath === canonicalRequested || w.path === canonicalRequested || w.path === worktreePath
@@ -171,13 +176,58 @@ export class ContextService {
       throw Object.assign(new Error(`Worktree not found: ${worktreePath}`), { code: "NOT_FOUND" });
     }
 
-    const isRepo = await git.isGitRepo(canonicalRequested).catch(() => false);
-    if (!isRepo) throw Object.assign(new Error(`Not a git repository: ${worktreePath}`), { code: "NOT_GIT_REPO" });
+    const observed = await git.observeRepositoryState(canonicalRequested, project.canonicalPath);
+    if (observed.availability !== "available") {
+      return {
+        path: worktreePath,
+        canonicalPath: observed.worktreePath,
+        branch: observed.branch,
+        headCommit: observed.head,
+        headCommitShort: observed.head ? observed.head.slice(0, 7) : null,
+        isDetached: observed.isDetached === true,
+        isDirty: null,
+        isMain: false,
+        isMissing: false,
+        inspection: "unavailable",
+        unavailableReason: observed.error ?? "canonical Git observation unavailable",
+        stagedChanges: [],
+        unstagedChanges: [],
+        untrackedFiles: [],
+        untrackedCount: 0,
+        ahead: null,
+        behind: null,
+        upstream: null,
+        provenance: { observedAt: observed.observedAt, projectName: project.name, projectPath: project.canonicalPath },
+      };
+    }
 
-    const branchInfo = await git.getBranch(canonicalRequested);
-    const head = await git.getHeadCommit(canonicalRequested);
-    const dirty = await git.isDirty(canonicalRequested);
+    const branchInfo = { branch: observed.branch, detached: observed.isDetached === true };
+    const head = observed.head;
+    const dirty = observed.isDirty;
     const status = await git.getStatusDetails(canonicalRequested);
+    if (!status.available) {
+      return {
+        path: worktreePath,
+        canonicalPath: canonicalRequested,
+        branch: observed.branch,
+        headCommit: observed.head,
+        headCommitShort: observed.head ? observed.head.slice(0, 7) : null,
+        isDetached: observed.isDetached === true,
+        isDirty: null,
+        isMain: false,
+        isMissing: false,
+        inspection: "unavailable",
+        unavailableReason: status.error ?? "git status unavailable",
+        stagedChanges: [],
+        unstagedChanges: [],
+        untrackedFiles: [],
+        untrackedCount: 0,
+        ahead: null,
+        behind: null,
+        upstream: null,
+        provenance: { observedAt: observed.observedAt, projectName: project.name, projectPath: project.canonicalPath },
+      };
+    }
     const up = await git.getUpstreamInfoFixed(canonicalRequested).catch(() => ({ upstream: null, ahead: null, behind: null }));
 
     let canonicalWt: string;
@@ -224,6 +274,16 @@ export class ContextService {
           throw Object.assign(new Error(`Invalid worktree path: ${opts?.worktreePath}`), { code: "PATH_ESCAPE" });
         })
       : project.canonicalPath;
+    if (!isWithinProjectRoot(project.canonicalPath, cwd)) {
+      throw Object.assign(new Error(`Worktree path is outside the explicitly configured project root: ${cwd}`), { code: "PATH_ESCAPE" });
+    }
+
+    const observed = await git.observeRepositoryState(cwd, project.canonicalPath);
+    if (observed.availability !== "available") {
+      throw Object.assign(new Error(observed.error ?? `Git observation unavailable: ${cwd}`), {
+        code: observed.availability === "not_git" ? "NOT_GIT_REPO" : "GIT_UNAVAILABLE",
+      });
+    }
 
     const limit = Math.min(opts?.limit ?? DEFAULT_LIMITS.maxCommitsDefault, DEFAULT_LIMITS.maxCommitsMax);
     const commits = await git.getRecentCommits(cwd, limit);
@@ -259,51 +319,31 @@ export class ContextService {
           throw Object.assign(new Error(`Invalid worktree path: ${opts?.worktreePath}`), { code: "PATH_ESCAPE" });
         })
       : project.canonicalPath;
+    if (!isWithinProjectRoot(project.canonicalPath, cwd)) {
+      throw Object.assign(new Error(`Worktree path is outside the explicitly configured project root: ${cwd}`), { code: "PATH_ESCAPE" });
+    }
 
     // Ensure cwd is inside allowed roots (already via policy) and is a git repo
-    const isRepo = await git.isGitRepo(cwd).catch(() => false);
-    if (!isRepo) throw Object.assign(new Error(`Not a git repository: ${cwd}`), { code: "NOT_GIT_REPO" });
+    const observed = await git.observeRepositoryState(cwd, project.canonicalPath);
+    if (observed.availability !== "available") {
+      throw Object.assign(new Error(observed.error ?? `Git observation unavailable: ${cwd}`), {
+        code: observed.availability === "not_git" ? "NOT_GIT_REPO" : "GIT_UNAVAILABLE",
+      });
+    }
 
     const mergeBase = await git.getMergeBase(cwd, base, target).catch(() => null);
     const { ahead, behind } = await git.getAheadBehind(cwd, base, target).catch(() => ({ ahead: null, behind: null }));
 
     // Commits in target not in base: target..base? Actually we want commits reachable from target but not base.
     // For compare base vs target, list commits in target ^ base — use "base..target"
-    let commits: import("../core/types.js").CommitSummary[] = [];
-    try {
-      // Use log with range
-      const { execFile } = await import("node:child_process");
-      const { promisify } = await import("node:util");
-      const execFileAsync = promisify(execFile);
-      const format = "%H%x1f%h%x1f%s%x1f%an%x1f%ae%x1f%aI%x1f%P%x1e";
-      const range = `${base}..${target}`;
-      const { stdout } = (await execFileAsync("git", ["log", `--pretty=format:${format}`, range], {
-        cwd,
-        maxBuffer: 5 * 1024 * 1024,
-        timeout: 15000,
-        encoding: "utf-8",
-      })) as { stdout: string };
-      if (stdout.trim()) {
-        const records = stdout.split("\x1e").filter((r: string) => r.trim().length > 0);
-        commits = records.map((rec: string) => {
-          const parts = rec.split("\x1f");
-          const [sha = "", shortSha = "", subject = "", author = "", authorEmail = "", date = "", parentsRaw = ""] = parts;
-          const parents = parentsRaw.trim() ? parentsRaw.trim().split(/\s+/) : [];
-          return { sha: sha.trim(), shortSha: shortSha.trim(), subject: subject.trim(), author: author.trim(), authorEmail: authorEmail.trim(), date: date.trim(), parents };
-        });
-        // Cap commits to avoid huge output
-        if (commits.length > 100) commits = commits.slice(0, 100);
-      }
-    } catch {
-      commits = [];
-    }
+    const commits = await git.getCommitsBetween(cwd, base, target);
 
     const diffStat = await git.getDiffStat(cwd, base, target).catch(() => "");
 
     let diff: string | null = null;
     let truncated = false;
     if (opts?.includeDiff) {
-      const maxBytes = Math.min(opts.maxDiffBytes ?? DEFAULT_LIMITS.maxDiffBytes, 500 * 1024);
+      const maxBytes = Math.min(opts.maxDiffBytes ?? this.config.limits.maxDiffBytes, this.config.limits.maxDiffBytes, 500 * 1024);
       const res = await git.getBoundedDiff(cwd, ["diff", `${base}..${target}`], maxBytes);
       diff = res.diff;
       truncated = res.truncated;
@@ -340,7 +380,7 @@ export class ContextService {
   ): Promise<ContextDocContent> {
     const project = this.config.projects.find((p) => p.name === projectName);
     if (!project) throw Object.assign(new Error(`Project not found: ${projectName}`), { code: "NOT_FOUND" });
-    const maxBytes = opts?.maxBytes ? Math.min(opts.maxBytes, 1024 * 1024) : undefined;
+    const maxBytes = opts?.maxBytes ? Math.min(opts.maxBytes, this.config.limits.maxFileSizeBytes) : this.config.limits.maxFileSizeBytes;
     return docs.readContextDocument(project, this.policy, requestedPath, maxBytes ? { maxBytes } : undefined);
   }
 
@@ -359,7 +399,8 @@ export class ContextService {
       query,
       project,
       policy: this.policy,
-      maxResults: opts?.maxResults,
+      maxResults: Math.min(opts?.maxResults ?? this.config.search.maxResults, this.config.limits.maxSearchResults),
+      maxFileSizeBytes: this.config.search.maxFileSizeBytes,
       caseSensitive: opts?.caseSensitive,
       includeGlobs: opts?.includeGlobs,
     });

@@ -9,8 +9,8 @@ import { SecurityPolicy } from "../core/security.js";
 import type { ResolvedConfig } from "../core/types.js";
 
 describe("MCP tool defs", () => {
-  it("exposes 11 tools with valid inputSchemas", () => {
-    expect(TOOL_DEFS.length).toBe(11);
+  it("exposes continuity and observability tools with valid inputSchemas", () => {
+    expect(TOOL_DEFS.length).toBe(17);
     const names = TOOL_DEFS.map((t) => t.name);
     expect(names).toContain("context.list_projects");
     expect(names).toContain("context.project_snapshot");
@@ -23,6 +23,12 @@ describe("MCP tool defs", () => {
     expect(names).toContain("context.read_context_document");
     expect(names).toContain("context.list_agent_sessions");
     expect(names).toContain("context.session_snapshot");
+    expect(names).toContain("context.task_upsert");
+    expect(names).toContain("context.task_list");
+    expect(names).toContain("context.task_get");
+    expect(names).toContain("context.handoff_create");
+    expect(names).toContain("context.handoff_list");
+    expect(names).toContain("context.handoff_get");
 
     for (const t of TOOL_DEFS) {
       expect(t.name).toMatch(/^context\./);
@@ -40,6 +46,12 @@ describe("MCP tool defs", () => {
   it("compare requires project, base, target", () => {
     const t = TOOL_DEFS.find((x) => x.name === "context.compare")!;
     expect((t.inputSchema as any).required).toEqual(expect.arrayContaining(["project", "base", "target"]));
+  });
+
+  it("handoff creation requires a task, status, and summary", () => {
+    const t = TOOL_DEFS.find((x) => x.name === "context.handoff_create")!;
+    expect((t.inputSchema as any).required).toEqual(expect.arrayContaining(["project", "taskId", "status", "summary"]));
+    expect((t.inputSchema as any).properties.assertedRepositoryState.properties.isDirty.type).toBe("boolean");
   });
 });
 

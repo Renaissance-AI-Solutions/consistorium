@@ -2,9 +2,9 @@
 
 ## 1. Purpose
 
-Context Bridge is a **vendor-neutral, passive, local-first, read-only development-context plane** for AI agents.
+Context Bridge is a **vendor-neutral, local-first continuity/state layer** for AI agents. Repository inspection remains read-only; narrow structured task/handoff records are durably stored outside inspected repositories.
 
-It answers *"What is actually happening in my development environment right now?"* without becoming an agent launcher, orchestrator, or task system.
+It answers *"What is actually happening, and where did the previous agent leave the task?"* without becoming an agent launcher, orchestrator, or execution service.
 
 The differentiator is **observability, not control** — OpenTelemetry for agentic development state, exposed through MCP.
 
@@ -14,7 +14,7 @@ The differentiator is **observability, not control** — OpenTelemetry for agent
 
 - No agent orchestration (launch/terminate/send terminal command)
 - No worktree/mutation control plane
-- No Kanban/task mutation
+- No Kanban board, scheduling, or generic task-management workflow
 - No web UI, auth/accounts, SaaS backend
 - No embeddings/vector search in v0.1
 - No database in v0.1 (lightweight local state only)
@@ -37,9 +37,11 @@ Chosen for:
 ```
 MCP transport (src/mcp)
       ↓
-ContextService (src/core/context.ts) — THE PORTABLE CORE
+ContextService + ContinuityStore (src/core) — THE PORTABLE CORE
       ↓
 Providers (git, docs, search) + Adapter interface (sessions) + Security/Config
+      ↓
+Bounded local JSON state (tasks + handoffs; no generic file API)
 ```
 
 - `ContextService` has **no MCP dependency**; it can be imported by a future Streamable HTTP server, CLI, or compiled binary.
@@ -53,7 +55,7 @@ Alternatives considered:
 - **Auto-discover repos under `$HOME`** — rejected: too permissive, violates least privilege.
 - **`CONTEXT_BRIDGE_CONFIG` env only** — kept as override, but discoverability matters for plugin installs (`PLUGIN_DATA`).
 
-Chose: **explicit `projects[].path` in YAML YAMLconfig** resolved with canonical, real ` and� check, with CLI `init` that forces the user to approve each root. Defaults are secure (no project → no access). Search order prefers `$PLUGIN_DATA` and `XDG_CONFIG_HOME` so plugin installs don't pollute `cwd`.
+Chose: **explicit `projects[].path` in YAML/JSON config** resolved with canonical realpath checks, with CLI `init` that forces the user to approve each root. Defaults are secure (no project → no repository access). Search order prefers `$CONTEXT_BRIDGE_CONFIG`, `$PLUGIN_DATA`, and XDG so plugin installs don't pollute `cwd`. Continuity state is derived from `CONTEXT_BRIDGE_STATE_DIR` or the config directory and is moved to a sibling/fallback location if the config lives inside a configured project.
 
 ### 3.4 Security as policy object
 
@@ -66,7 +68,7 @@ Rejected:
 - `shell: true` + string interpolation — injection hazard
 - `isomorphic-git` (pure JS) — loses fidelity on worktree discovery and diff behavior; `git` CLI is the reference
 
-Chose: `execFile("git", argsArray)` with an **explicit allowlist** of read-only subcommands and a ref-validation regex for user-supplied refs. `maxBuffer` and `timeout` bound each call.
+Chose: `execFile("git", argsArray)` with an **explicit allowlist** of read-only subcommands and a ref-validation regex for user-supplied refs. A single hardened wrapper removes inherited `GIT_*` helper/config knobs, disables optional locks, fsmonitor, hooks, external diff, and textconv, and bounds `maxBuffer` and timeout. Canonical handoff observation returns `available`, `not_git`, or `unavailable`; it never maps command failure to clean.
 
 ### 3.6 Bounded outputs with `truncated` signals
 
@@ -81,6 +83,28 @@ Callers see `truncated: true` and can decide whether to refine the query. This p
 Instead of requiring 20 tool calls to answer "what's going on?", `context.project_snapshot` aggregates branch, worktrees, recent commits, docs, and sessions in one structured call. Other tools exist for drilling down. The skill `project-state` directs the model to call `project_snapshot` first.
 
 ---
+
+### 3.8 Continuity state
+
+`ContinuityStore` writes only two structured record families:
+
+- `tasks`: stable safe task ID, project identity, title, objective, state, constraints, next actions, timestamps, and provenance.
+- `handoffs`: project/task identity, agent provenance, status, summary, findings, structured validation, decisions, blockers, next actions, relevant files/commits, and repository state.
+
+The default state root is not a project root. Directory and record modes are `0700` and `0600`; records are bounded and written through same-directory temp-file + rename. IDs are validated and storage filenames are hashes, so an MCP argument cannot become a path.
+
+Handoff repository state is deliberately split:
+
+```text
+repositoryState:
+  canonical:       # live observation captured by Context Bridge
+  assertion:       # optional agent-reported branch/HEAD/dirty facts
+  mismatches: []   # explicit assertion-vs-canonical differences
+  refreshed: ...   # get detail only; current live observation
+  staleness: ...
+```
+
+External linked worktrees can appear as Git metadata, but status/read operations are limited unless the path is inside the explicitly configured project root.
 
 ## 4. Data models
 
@@ -98,12 +122,14 @@ Key types:
 - `RecentChanges` — commits, changed-file stats, diff stat
 - `CompareResult` — merge-base, ahead/behind, commits, diff stat, optional bounded diff
 - `SessionSummary` / `SessionSnapshot` — normalized harness/model/state/title/timestamps with bounded redacted preview
+- `StoredTask` — durable project/task objective and continuation actions
+- `StoredHandoff` — durable agent findings, validation, decisions, blockers, next actions, and canonical/asserted repository facts
 
 ---
 
 ## 5. MCP API
 
-Avoided dozens of tiny tools. Chose 11 coherent, high-value tools (all `context.*`):
+The surface has 17 bounded tools (all `context.*`). The continuity tools intentionally separate compact list projections from detail retrieval:
 
 ```
 list_projects, project_snapshot,
@@ -111,7 +137,9 @@ list_worktrees, worktree_snapshot,
 recent_changes, compare,
 search,
 list_context_documents, read_context_document,
-list_agent_sessions, session_snapshot
+list_agent_sessions, session_snapshot,
+task_upsert, task_list, task_get,
+handoff_create, handoff_list, handoff_get
 ```
 
 All tools:
@@ -119,6 +147,8 @@ All tools:
 - Have JSON Schema `inputSchema` (draft 2020-12 style), `additionalProperties: false`
 - Validate required fields early and return `{ error, code }` with `isError: true` rather than throwing unstructured
 - Include `provenance` so the model knows freshness and can reason about staleness
+- Validate MCP arguments at runtime with Zod; malformed integer/boolean values are rejected rather than coerced
+- Keep list calls compact; full task/handoff fields are returned only by `*_get`
 
 Naming follows `context.<noun>_<verb>` for coherence; `project_snapshot` is intentionally the most capable.
 
@@ -130,7 +160,7 @@ Naming follows `context.<noun>_<verb>` for coherence; `project_snapshot` is inte
 
 Purpose: teach a model to ground strategic advice in observed state.
 
-Flow: `list_projects` → `project_snapshot` (hero) → surface worktrees → `recent_changes` / `compare` → `list_context_documents` → `read_context_document` → `list_agent_sessions` → synthesize with observed/inferred separation, staleness note, and bias against "main is truth".
+Flow for a clean-context continuation: `list_projects` → `task_list` → `task_get` → `handoff_list` → latest `handoff_get` → direct `project_snapshot`/Git verification → synthesize with observed/inferred separation, staleness note, and assertion mismatch warnings. Use `project_snapshot`/worktree tools as needed for broader orientation.
 
 ### 6.2 `session-to-content` (roadmap, not shipped)
 
@@ -150,19 +180,20 @@ src/
     config.ts             YAML/JSON load, zod validate, realpath resolve
     security.ts           SecurityPolicy, denylist, isDeniedByPolicy
     context.ts            ContextService — provider orchestration
+    continuity.ts         bounded local task/handoff store + runtime schemas
   providers/
-    git.ts                allowlisted git exec, worktree discovery, status, log, compare
+    git.ts                hardened allowlisted git exec, worktree discovery, status, log, compare, canonical observation
     documents.ts          walk + glob filter + policy + bounded read
     search.ts             walk + plain-text scan + denylist + bounded previews
   adapters/
     session.ts            SessionAdapter interface + GenericSessionAdapter + Noop
   mcp/
     server.ts             stdio transport, tool dispatch, no-config helpful errors
-    tools.ts              11 tool definitions (inputSchema)
+    tools.ts              17 tool definitions (inputSchema)
   cli/
     index.ts              init / config show / config validate / serve
 example-config.yaml       annotated starter config
-src/__tests__/            unit + integration (security, config, git, docs, search, mcp)
+  src/__tests__/            unit + integration (security, config, git, docs, search, mcp, continuity)
 ```
 
 ---
@@ -208,5 +239,4 @@ If the published spec evolves, `plugin.json` / `mcp.json` are the only files tha
 - **Binary build** — `ContextService` + providers can be ported to Rust/Go; `plugin.json`/`mcp.json` packaging is unaffected.
 - **Additional adapters** — implement `SessionAdapter` for Codex `~/.codex/sessions`, Claude `~/.claude/`, etc., when storage formats are stable and opt-in.
 
-All extensions should remain **read-only, local-first, explicitly allowlisted**.
-
+All repository-facing extensions should remain **read-only, local-first, explicitly allowlisted**. Continuity extensions may add bounded structured state only; they must not become an execution/orchestration or generic filesystem service.

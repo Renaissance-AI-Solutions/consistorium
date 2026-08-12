@@ -62,8 +62,7 @@ describe("ContextService", () => {
       const wts = await svc.listWorktrees("proj");
       expect(wts.length).toBe(2);
       const realWt = await fs.promises.realpath(wt);
-      const snap = await svc.worktreeSnapshot("proj", realWt);
-      expect(snap.branch).toBe("feature");
+      await expect(svc.worktreeSnapshot("proj", realWt)).rejects.toMatchObject({ code: "PATH_ESCAPE" });
     } finally {
       try {
         await git(repo, ["worktree", "remove", "--force", wt]);

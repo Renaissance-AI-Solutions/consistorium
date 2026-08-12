@@ -85,4 +85,10 @@ projects:
     const resolved = resolveConfigSync(raw as any, "/tmp/config.yaml");
     expect(resolved.projects[0]!.canonicalPath).toBe("/tmp/does-not-exist-xyz-123");
   });
+
+  it("validates bounded worktree limits as integers", () => {
+    expect(() => parseConfigContent(`projects:\n  - name: p\n    path: /tmp/p\nlimits:\n  maxWorktrees: 2.5\n`, "config.yaml")).toThrow();
+    const parsed = parseConfigContent(`projects:\n  - name: p\n    path: /tmp/p\nlimits:\n  maxWorktrees: 2\n`, "config.yaml");
+    expect(resolveConfigSync(parsed, "/tmp/config.yaml").limits.maxWorktrees).toBe(2);
+  });
 });

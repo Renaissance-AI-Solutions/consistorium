@@ -2,20 +2,21 @@
 
 ## 1. System boundary
 
-Context Bridge sits between **an AI agent (MCP client)** and **the developer's local filesystem / git repositories**.
+Context Bridge sits between **an AI agent (MCP client)** and **the developer's local filesystem / git repositories**, with a separate local continuity state directory.
 
 - The agent is **untrusted** with respect to the filesystem: it may be prompted adversarially or hallucinate paths.
 - The filesystem is **trusted** but contains sensitive data (secrets, keys, private repos).
 - The plugin process is **local, user-owned**, and should not exfiltrate data without explicit user action.
 
 ```
-[ AI (untrusted prompt influence) ] --MCP--> [ Context Bridge ] --allowlisted git/fs--> [ Filesystem ]
+[ AI (untrusted prompt influence) ] --MCP--> [ Context Bridge ] --read-only allowlisted git/fs--> [ Projects ]
+                                              └── bounded structured writes ──> [ State outside projects ]
 ```
 
 ## 2. Goals
 
 - **Confidentiality**: Do not expose files/secrets outside explicitly allowlisted scope.
-- **Integrity**: Do not mutate repositories, branches, worktrees, or files.
+- **Integrity**: Do not mutate repositories, branches, worktrees, or arbitrary files; only write validated task/handoff records to the continuity state directory.
 - **Availability**: Bound outputs and timeouts so a malicious query cannot hang or OOM the host.
 - **Privacy**: No telemetry, no source/model data leaves the machine in the MVP.
 
@@ -25,6 +26,7 @@ Context Bridge sits between **an AI agent (MCP client)** and **the developer's l
 - Credentials: `.env`, `.pem`, `*.key`, `.ssh/`, `.aws/`, `.gnupg/`, tokens
 - Git history including uncommitted changes and untracked files
 - Agent session artifacts (may contain task details)
+- Durable task and handoff records, including agent assertions and findings
 
 ## 4. Adversaries & capabilities
 
@@ -56,6 +58,20 @@ Assumptions:
 
 **Residual risk**: A user who allowlists `context: ["**/*"]` could widen exposure; docs warn to keep globs narrow.
 
+### 5.2a Continuity state and record abuse
+
+**Threat**: A prompt-injected agent attempts path traversal, oversized records, or a generic write through task/handoff tools; a repository is polluted with state files.
+
+**Mitigations**:
+
+- Only six structured `context.task_*`/`context.handoff_*` operations exist. There is no generic path or file-write tool.
+- IDs are strict safe identifiers; storage filenames are hashes, and records are capped at 256 KiB with bounded strings/arrays.
+- Default state is derived from `CONTEXT_BRIDGE_STATE_DIR` or config location and is relocated outside configured project roots when the config itself lives in a project. An in-project state path requires explicit `CONTEXT_BRIDGE_STATE_DIR`.
+- Writes use a same-directory exclusive temp file, `fsync`, restrictive modes (`0700` directories, `0600` records), and rename.
+- Lists return compact summaries. Full objective/transcript-like content is never injected by list calls.
+
+**Residual risk**: The local user can explicitly select an unsafe state location or read the state directory directly; this is an intentional local-user authority boundary.
+
 ### 5.2 Path traversal (`../`) and symlink escapes
 
 **Threat**: Agent passes `../../.ssh/id_rsa`, or repo contains `docs/evil -> /etc`.
@@ -81,6 +97,16 @@ Assumptions:
 - Deny-listed flags (`--hard`, etc.) are blocked even on allowed subcommands.
 
 **Residual risk**: Git itself can consume large output; we bound `maxBuffer` and timeouts (15s).
+
+### 5.3a Git helper/config and canonical truth
+
+**Threat**: Repository-local Git config invokes external diff/textconv/fsmonitor/helpers, takes an optional index lock, or a command failure is interpreted as clean.
+
+**Mitigations**:
+
+- All provider calls go through one hardened `execFile` wrapper with no shell, sanitized `GIT_*` environment, system/global config disabled, `GIT_OPTIONAL_LOCKS=0`, fsmonitor/hooks disabled, and external diff/textconv disabled for diff calls.
+- Canonical handoff observation returns explicit `available`, `not_git`, or `unavailable` states with nullable branch/HEAD/dirty fields. A failed command cannot become `isDirty: false` or an empty canonical record.
+- Agent-reported branch/HEAD/dirty values are stored under `assertion`; mismatches against canonical observation are calculated and surfaced.
 
 ### 5.4 Output exfiltration via large reads / DoS
 
@@ -119,6 +145,16 @@ Assumptions:
 - Even within allowed commands, destructive flags like `--hard` are blocked.
 - `ContextService` and all providers are **read-only contracts**; no file writes go to inspected repos.
 
+### 5.6a External linked worktrees
+
+**Threat**: `git worktree list` reports a linked worktree outside the configured project root and the server then runs status/read operations against that external path.
+
+**Mitigations**:
+
+- Worktree metadata may be listed for orientation, but status, upstream, and snapshot inspection are skipped unless the canonical path is inside the explicitly configured project root.
+- Limited entries expose `inspection: "limited"`, nullable dirty state, and a clear reason. `worktree_snapshot`, recent changes, compare, and continuity observation enforce the project-root boundary.
+- `maxWorktrees` is validated and applied to discovery.
+
 ### 5.7 Configuration tampering / privilege escalation
 
 **Threat**: Agent influences config to widen allowlist without user noticing.
@@ -143,6 +179,7 @@ Assumptions:
 - **Multi-tenant isolation**: Not in v0.1 (single local user).
 - **Perfect secret redaction**: Best-effort regex only; exhaustive secret detection is a non-goal for v0.1.
 - **Encrypted storage**: Session previews and diffs are plaintext in local memory/conversation context; encryption at rest is not provided.
+- **Local state confidentiality**: task/handoff JSON is protected by OS permissions but is not encrypted; users should choose a trusted state directory.
 
 ## 7. Verifiability
 
@@ -157,6 +194,7 @@ The dangerous boundaries are covered by tests that must pass before release:
 - bounded output (`truncated` flags)
 - malformed config handling
 - MCP tool schema correctness
+- task/handoff persistence, bounded/atomic state, safe IDs, canonical-vs-asserted mismatch, refresh staleness, non-Git availability, and external-worktree limits
 
 See `src/__tests__/` and `tests/` (when present) and CI gates in `CONTRIBUTING.md`.
 
@@ -164,11 +202,11 @@ See `src/__tests__/` and `tests/` (when present) and CI gates in `CONTRIBUTING.m
 
 1. No MCP tool grants arbitrary filesystem read.
 2. No path is read without `realpath` canonicalization and allowlist check.
-3. No git command leaves the allowlist or uses shell string interpolation.
-4. No write to inspected repositories without explicit user `init` targeting them.
-5. No secret-basename file is served even if it matches a context glob.
-6. Every bounded output signals truncation.
-7. Every tool response includes provenance.
+3. No git command leaves the allowlist, inherits unsafe helper config, or uses shell string interpolation.
+4. No write to inspected repositories occurs unless the user explicitly opts a state directory into that location.
+5. No generic filesystem write or read is exposed through MCP.
+6. No secret-basename file is served even if it matches a context glob.
+7. Every bounded output signals truncation or an explicit limit.
+8. Every tool response includes provenance or structured state availability.
 
 If any invariant would be violated by a proposed change, the change must be rejected or put behind a reviewed, opt-in flag.
-

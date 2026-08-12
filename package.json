@@ -1,7 +1,7 @@
 {
   "name": "context-bridge",
   "version": "0.1.0",
-  "description": "Vendor-neutral, passive, local-first, read-only development-context plane via MCP",
+  "description": "Vendor-neutral local task and handoff continuity plus bounded development-state observation via MCP",
   "type": "module",
   "bin": {
     "context-bridge": "./dist/cli/index.js"
@@ -20,7 +20,7 @@
     "start": "node dist/mcp/server.js",
     "cli": "node dist/cli/index.js",
     "typecheck": "tsc --noEmit",
-    "lint": "eslint src --ext .ts",
+    "lint": "eslint src",
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",

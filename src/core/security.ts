@@ -119,6 +119,11 @@ export function isDeniedByPolicy(
 ): { denied: boolean; reason?: string } {
   const base = path.basename(canonicalPath);
 
+  // `**/.git/**` does not match the exact `.git` directory itself.
+  if (base === ".git" || canonicalPath.split(path.sep).includes(".git")) {
+    return { denied: true, reason: "denied .git path" };
+  }
+
   // 1. Exact denied basenames
   if (DENIED_BASENAMES.has(base)) {
     return { denied: true, reason: `denied basename: ${base}` };

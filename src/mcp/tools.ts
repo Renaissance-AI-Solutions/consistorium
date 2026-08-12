@@ -2,9 +2,6 @@
  * MCP tool definitions for Context Bridge.
  * Each tool has a name, description, inputSchema (JSON Schema), and handler.
  */
-import { z } from "zod";
-import { zodToJsonSchema } from "./zodToJson.js";
-
 // We avoid depending on zod-to-json-schema lib to keep deps minimal; we inline a tiny converter below.
 // Actually we generate JSON Schema manually for control.
 
@@ -38,6 +35,143 @@ export const TOOL_DEFS: ToolDef[] = [
     name: "context.list_projects",
     description: "List all explicitly configured projects with their canonical path and git status. No arguments.",
     inputSchema: { type: "object", properties: {}, additionalProperties: false },
+  },
+  {
+    name: "context.task_upsert",
+    description: "Create or update one bounded durable task record outside inspected repositories.",
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      required: ["project", "taskId", "title", "objective", "state"],
+      properties: {
+        project: { type: "string", pattern: "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$" },
+        taskId: { type: "string", pattern: "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$" },
+        title: { type: "string", minLength: 1, maxLength: 500 },
+        objective: { type: "string", minLength: 1, maxLength: 4000 },
+        state: { type: "string", enum: ["open", "in_progress", "blocked", "ready_for_review", "complete", "cancelled"] },
+        constraints: { type: "array", maxItems: 50, items: { type: "string", minLength: 1, maxLength: 4000 } },
+        nextActions: { type: "array", maxItems: 50, items: { type: "string", minLength: 1, maxLength: 4000 } },
+        provenance: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            name: { type: "string", maxLength: 500 },
+            harness: { type: "string", maxLength: 500 },
+            model: { type: "string", maxLength: 500 },
+            sessionId: { type: "string", pattern: "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$" },
+          },
+        },
+      },
+    },
+  },
+  {
+    name: "context.task_list",
+    description: "List compact task summaries; call context.task_get for the full task and live repository observation.",
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        project: { type: "string", pattern: "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$" },
+        state: { type: "string", minLength: 1, maxLength: 64 },
+        limit: { type: "integer", minimum: 1, maximum: 100, default: 20 },
+      },
+    },
+  },
+  {
+    name: "context.task_get",
+    description: "Get one task's full structured detail and refreshed live repository availability/state.",
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      required: ["project", "taskId"],
+      properties: {
+        project: { type: "string", pattern: "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$" },
+        taskId: { type: "string", pattern: "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$" },
+      },
+    },
+  },
+  {
+    name: "context.handoff_create",
+    description: "Persist a bounded agent-to-agent handoff with canonical observed repository state separated from optional assertions.",
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      required: ["project", "taskId", "status", "summary"],
+      properties: {
+        project: { type: "string", pattern: "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$" },
+        taskId: { type: "string", pattern: "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$" },
+        handoffId: { type: "string", pattern: "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$" },
+        worktreePath: { type: "string", minLength: 1, maxLength: 4000 },
+        agent: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            name: { type: "string", maxLength: 500 },
+            harness: { type: "string", maxLength: 500 },
+            model: { type: "string", maxLength: 500 },
+            sessionId: { type: "string", pattern: "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$" },
+          },
+        },
+        status: { type: "string", enum: ["in_progress", "ready_for_review", "blocked", "complete", "cancelled"] },
+        summary: { type: "string", minLength: 1, maxLength: 4000 },
+        findings: { type: "array", maxItems: 50, items: { type: "string", minLength: 1, maxLength: 4000 } },
+        validation: {
+          type: "array",
+          maxItems: 50,
+          items: {
+            type: "object",
+            additionalProperties: false,
+            required: ["name", "status"],
+            properties: {
+              name: { type: "string", maxLength: 500 },
+              status: { type: "string", enum: ["passed", "failed", "skipped", "blocked", "unknown"] },
+              details: { type: "string", maxLength: 4000 },
+            },
+          },
+        },
+        decisions: { type: "array", maxItems: 50, items: { type: "string", minLength: 1, maxLength: 4000 } },
+        blockers: { type: "array", maxItems: 50, items: { type: "string", minLength: 1, maxLength: 4000 } },
+        nextActions: { type: "array", maxItems: 50, items: { type: "string", minLength: 1, maxLength: 4000 } },
+        relevantFiles: { type: "array", maxItems: 50, items: { type: "string", minLength: 1, maxLength: 500 } },
+        commits: { type: "array", maxItems: 50, items: { type: "string", minLength: 1, maxLength: 200 } },
+        assertedRepositoryState: {
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            branch: { type: "string", maxLength: 500 },
+            head: { type: "string", maxLength: 200 },
+            isDirty: { type: "boolean" },
+            worktreePath: { type: "string", maxLength: 4000 },
+          },
+        },
+      },
+    },
+  },
+  {
+    name: "context.handoff_list",
+    description: "List compact handoff summaries, optionally filtered by project/task; call context.handoff_get for detail.",
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      properties: {
+        project: { type: "string", pattern: "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$" },
+        taskId: { type: "string", pattern: "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$" },
+        limit: { type: "integer", minimum: 1, maximum: 100, default: 20 },
+      },
+    },
+  },
+  {
+    name: "context.handoff_get",
+    description: "Get one complete handoff, with refreshed live repository facts, staleness, and assertion mismatches.",
+    inputSchema: {
+      type: "object",
+      additionalProperties: false,
+      required: ["project", "handoffId"],
+      properties: {
+        project: { type: "string", pattern: "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$" },
+        handoffId: { type: "string", pattern: "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$" },
+      },
+    },
   },
   {
     name: "context.project_snapshot",

@@ -1,14 +1,14 @@
-# Context Bridge — Portable Development Intelligence for AI Agents
+# Context Bridge — Portable Agent-to-Agent Continuity
 
-> A passive, vendor-neutral, local-first, **read-only** development-context plane that any MCP-capable AI can query.
+> A vendor-neutral, local-first continuity layer for structured tasks, handoffs, and bounded live development-state observation.
 
 Modern developers run multiple AI coding agents, models, sessions, branches, and git worktrees simultaneously. Each agent understands its own task, but **no single intelligence sees the whole live state**. The human becomes the synchronization layer.
 
-Context Bridge answers:
+Context Bridge answers two related questions:
 
-> *“What is actually happening in my development environment right now?”*
+> *“What is actually happening right now, and where did the previous agent leave the task?”*
 
-It exposes that view safely to Codex, ChatGPT, Claude, Cursor, or any MCP-capable agent — without controlling the agents, mutating repos, or leaving the machine.
+Repository inspection is read-only. The only durable writes are bounded structured task/handoff records in a local state directory outside configured project roots by default. Context Bridge does not control agents, execute commands on their behalf, or use a network service.
 
 ---
 
@@ -16,10 +16,10 @@ It exposes that view safely to Codex, ChatGPT, Claude, Cursor, or any MCP-capabl
 
 | It **is** | It **is not** |
 |---|---|
-| Read-only observability for local dev state | A coding agent |
-| MCP server + Agent Plugin | A multi-agent orchestrator |
-| Vendor-neutral adapter layer | A dashboard / SaaS / Kanban board |
-| Local-first, no cloud, no telemetry | An embedding / vector-search product |
+| Structured task and handoff continuity | A coding agent or execution service |
+| Bounded read-only repository observation | A multi-agent orchestrator |
+| MCP server + Agent Plugin | A dashboard / SaaS / Kanban board |
+| Local-first state, no cloud, no telemetry | An embedding / vector-search product |
 
 Think: **OpenTelemetry-like observability for agentic development**, exposed through MCP.
 
@@ -34,12 +34,12 @@ Think: **OpenTelemetry-like observability for agentic development**, exposed thr
                         │ MCP (stdio — primary)
 ┌───────────────────────▼─────────────────────────────────┐
 │  Context Bridge MCP Server  (src/mcp)                    │
-│  11 tools  ·  structured JSON  ·  bounded outputs        │
+│  17 context.* tools · strict JSON · bounded outputs      │
 └───────────────────────┬─────────────────────────────────┘
                         │ delegates to
 ┌───────────────────────▼─────────────────────────────────┐
-│  ContextService  (src/core/context.ts)                   │
-│  Orchestrates providers. Stable core, transport-agnostic │
+│  ContextService + ContinuityStore (src/core)              │
+│  Observation + local task/handoff records; no execution   │
 │  (ready for future Streamable HTTP without rewrite)      │
 └──────────┬──────────┬───────────┬───────────┬───────────┘
            │          │           │           │
@@ -51,6 +51,14 @@ Think: **OpenTelemetry-like observability for agentic development**, exposed thr
      │ git cmd) │ │  globs) │ │         │ │              │
      └──────────┘ └────────┘ └─────────┘ └──────────────┘
            │          │           │           │
+           └───────────────┬──────────────────┘
+                           ▼
+                ┌──────────────────────┐
+                │ Local state directory │
+                │ tasks/ + handoffs/   │
+                │ atomic, mode 0700/600│
+                └──────────────────────┘
+                           │
 ┌──────────▼──────────▼───────────▼───────────▼───────────┐
 │  Security / Policy  (src/core/security.ts)               │
 │  • workspace allowlisting  • realpath canonicalization   │
@@ -114,7 +122,23 @@ Most clients accept an `mcp.json` like:
 }
 ```
 
-When installed as an Agent Plugin, `mcp.json` is discovered at the plugin root and the server is launched via `command: ./dist/mcp/server.js` with `cwd: ${PLUGIN_ROOT}`.
+When installed as an Agent Plugin, `mcp.json` is discovered at the plugin root and the server is launched via `command: ./dist/mcp/server.js` with `cwd: ${PLUGIN_ROOT}`. Set `CONTEXT_BRIDGE_STATE_DIR` if you need to choose the state location explicitly; otherwise the server derives a restrictive state directory from the config location and keeps it outside configured project roots.
+
+### Connect Hermes
+
+After building, add the stdio server to Hermes with portable paths. The exact flag values below are ordinary Hermes CLI options; replace the placeholders for your machine:
+
+```bash
+hermes mcp add context-bridge \
+  --command node \
+  --args /portable/path/context-bridge/dist/mcp/server.js \
+  --env CONTEXT_BRIDGE_CONFIG=/portable/path/context-bridge-config.yaml \
+  --env CONTEXT_BRIDGE_STATE_DIR=/portable/path/context-bridge-state
+```
+
+The two `--env KEY=VALUE` entries are passed to the stdio server as environment variables.
+
+The config must explicitly list the repository root. The state directory may be outside the repository; do not put it in a project unless you intentionally set `CONTEXT_BRIDGE_STATE_DIR` there.
 
 ---
 
@@ -137,6 +161,11 @@ context-bridge config validate
 #   "What worktrees currently exist?"
 #   "Which worktrees have uncommitted changes?"
 #   "What does TODO.md say?"
+
+# 4. Establish a task, then leave a structured handoff
+#    The agent calls context.task_upsert and context.handoff_create.
+#    A fresh agent calls context.task_list, context.task_get,
+#    context.handoff_list, and context.handoff_get before direct verification.
 ```
 
 Example config (`~/.config/context-bridge/config.yaml`):
@@ -161,7 +190,7 @@ Only allowlisted `projects[].path` are ever inspected. Only `context` globs are 
 
 ---
 
-## MCP tools (11)
+## MCP tools (17)
 
 | Tool | What it answers |
 |---|---|
@@ -176,8 +205,14 @@ Only allowlisted `projects[].path` are ever inspected. Only `context` globs are 
 | `context.read_context_document` | Read one allowlisted doc (bounded, policy-checked) |
 | `context.list_agent_sessions` | Which agent/session artifacts were found? |
 | `context.session_snapshot` | Detail + redacted preview of one session |
+| `context.task_upsert` | Create or update a bounded durable task |
+| `context.task_list` | List compact task summaries |
+| `context.task_get` | Read task detail plus refreshed live repository availability |
+| `context.handoff_create` | Create a handoff with canonical observed Git state |
+| `context.handoff_list` | List compact handoff summaries |
+| `context.handoff_get` | Read handoff detail, refresh state, and show staleness/mismatches |
 
-All tools return structured JSON with `provenance.observedAt`. Large outputs are truncated, not dumped.
+Lists are intentionally compact; detail is retrieved only with `*_get`. Handoff repository facts are split into canonical observations and optional agent assertions. Assertions never replace live canonical values. Large outputs are bounded, not dumped.
 
 Design principle: `context.project_snapshot` should answer ~80% of *"what's going on?"* without chaining 20 calls.
 
@@ -187,11 +222,12 @@ Design principle: `context.project_snapshot` should answer ~80% of *"what's goin
 
 The skill at `skills/project-state/SKILL.md` teaches a consuming model to:
 
-1. Call `list_projects` → `project_snapshot` before strategic advice
-2. Surface parallel worktrees (don't assume `main` is reality)
-3. Prefer summaries/diff-stat before requesting bounded diffs
-4. Respect allowlisting and staleness (`observedAt`)
-5. Distinguish observed facts from inference
+1. Discover the project, then list tasks and compact handoffs
+2. Get the selected task and latest handoff before asking for detail
+3. Verify canonical branch/HEAD/worktree state directly after orientation
+4. Surface parallel worktrees (don't assume `main` is reality)
+5. Respect allowlisting, availability, staleness, and assertion mismatches
+6. Distinguish observed facts from inference
 
 See the skill file for the full workflow.
 
@@ -203,14 +239,14 @@ Read `THREAT_MODEL.md` and `SECURITY.md` for details. Summary invariants:
 
 - **Explicit allowlist** — only `projects[].path` are inspected; path is canonicalized via `realpath` and checked via `SecurityPolicy`.
 - **No `..` traversal, no symlink escapes** — missing-tail realpath, segment checks, and `isInsideAllowedRoot`.
-- **No arbitrary filesystem** — no tool exposes raw `readFile("/etc/passwd")`-style access; documents are glob-allowlisted per project.
+- **No arbitrary filesystem** — no tool exposes raw `readFile("/etc/passwd")`-style access; documents are glob-allowlisted per project. Task/handoff persistence exposes only structured operations, never a generic file-write tool.
 - **Denylist for secrets** — `.env`, `*.pem`, `*.key`, `.ssh/`, `.aws/`, `.gnupg/`, `*secret*`, `*token*`, `*credential*`, credential files are denied by default.
 - **Binary skip** — known binary extensions and detected binaries are excluded from search/docs/sessions.
-- **Bounded outputs** — `maxFileSizeBytes` (256 KiB), `maxDiffBytes` (128 KiB), `maxSearchResults` (100) by default; every tool respects caps and signals `truncated`.
+- **Bounded outputs and state** — `maxFileSizeBytes` (256 KiB), `maxDiffBytes` (128 KiB), `maxSearchResults` (100), 50-item structured arrays, and 256 KiB records by default.
 - **No shell** — git is invoked via `execFile` with allowlisted subcommands (`rev-parse`, `status`, `log`, `diff`, `worktree`, `merge-base`, `rev-list`, etc.) and arg arrays. No string interpolation.
 - **Read-only git** — `checkout`, `reset --hard`, `commit`, `push`, `merge`, `rebase`, branch create/delete are never invoked.
 - **No network** in the MVP core.
-- **Config/data writes** only to `PLUGIN_DATA` or the user's config directory, never into inspected repos unless `context-bridge init --output` explicitly targets there.
+- **State writes** are atomic and mode-restricted (`0700` directories, `0600` records), derived from `CONTEXT_BRIDGE_STATE_DIR` or the config directory, and kept outside inspected repos unless the state-dir variable explicitly opts in.
 - **Session preview redaction** — best-effort regex redaction of keys/tokens in session artifacts.
 
 ---
@@ -219,7 +255,7 @@ Read `THREAT_MODEL.md` and `SECURITY.md` for details. Summary invariants:
 
 Resolution order when no `--config` / `CONTEXT_BRIDGE_CONFIG` is given:
 
-1. `$PLUGIN_DATA/config.yaml` / `.json`
+1. `$CONTEXT_BRIDGE_CONFIG` when set, then `$PLUGIN_DATA/config.yaml` / `.json`
 2. `$XDG_CONFIG_HOME/context-bridge/config.yaml` (or `~/.config/context-bridge/config.yaml`)
 3. `./.context-bridge.yaml`, `./context-bridge.yaml`, `.json` variants in `cwd`
 
@@ -235,7 +271,7 @@ See `example-config.yaml` for a full annotated example.
 npm run build        # tsc
 npm run typecheck    # tsc --noEmit
 npm test             # vitest
-npm run lint         # eslint (if configured)
+npm run lint         # ESLint 9 flat config
 ```
 
 Tests use **synthetic temporary repos** (created in `os.tmpdir()` per test) — they never touch the host filesystem beyond allowed fixtures, and never depend on a private Corpus repo.
@@ -250,7 +286,7 @@ See `ROADMAP.md` for deferred items. Near-term:
 - More passive agent adapters (Codex, Claude Code) where reliably derivable
 - Optional `session-to-content` skill (analyze session artifacts for shareable lessons — with aggressive redaction, no auto-publish)
 
-Not on the roadmap: agent launcher, terminal control plane, worktree creator, orchestrator — Context Bridge stays observability-only.
+Outsourcerer is a future adapter/integration item, not a shipped execution path. Not on the roadmap: agent launcher, terminal control plane, worktree creator, or orchestrator — Connect Bridge remains a continuity/state layer with read-only repository observation.
 
 ---
 

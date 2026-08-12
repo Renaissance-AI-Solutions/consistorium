@@ -13,7 +13,7 @@ const VERSION = "0.1.0";
 
 function printHelp(): void {
   console.log(`
-Context Bridge v${VERSION} — vendor-neutral, read-only development-context plane
+Context Bridge v${VERSION} — vendor-neutral task/handoff continuity + bounded repository observation
 
 Usage:
   context-bridge <command> [options]
@@ -43,6 +43,7 @@ Examples:
 
 Environment:
   CONTEXT_BRIDGE_CONFIG   Explicit config file path
+  CONTEXT_BRIDGE_STATE_DIR Explicit local task/handoff state directory (otherwise derived outside projects)
   PLUGIN_DATA             Plugin data directory (overrides default config location)
 `.trim());
 }

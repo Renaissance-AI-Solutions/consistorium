@@ -39,6 +39,7 @@ export interface LimitsConfig {
   maxFileSizeBytes?: number; // for read_context_document
   maxDiffBytes?: number;
   maxSearchResults?: number;
+  maxWorktrees?: number;
 }
 
 export interface ResolvedConfig {
@@ -46,7 +47,7 @@ export interface ResolvedConfig {
   projects: ResolvedProject[];
   sessionArtifacts: { patterns: string[] };
   search: { maxResults: number; maxFileSizeBytes: number };
-  limits: { maxFileSizeBytes: number; maxDiffBytes: number; maxSearchResults: number };
+  limits: { maxFileSizeBytes: number; maxDiffBytes: number; maxSearchResults: number; maxWorktrees?: number };
   configPath: string; // canonical path of the config file loaded
   observedAt: string;
 }
@@ -85,14 +86,17 @@ export interface ProjectInfo {
   name: string;
   canonicalPath: string;
   isGitRepo: boolean;
+  gitAvailability?: "available" | "not_git" | "unavailable";
 }
 
 export interface GitRepoState {
+  availability?: "available" | "not_git" | "unavailable";
+  error?: string;
   branch: string | null; // null for detached HEAD
   headCommit: string | null; // full sha or null if no commits
   headCommitShort: string | null;
   isDetached: boolean;
-  isDirty: boolean;
+  isDirty: boolean | null;
   ahead?: number | null;
   behind?: number | null;
   upstream?: string | null;
@@ -106,13 +110,15 @@ export interface WorktreeInfo {
   headCommit: string | null;
   headCommitShort: string | null;
   isDetached: boolean;
-  isDirty: boolean;
+  isDirty: boolean | null;
   isMain: boolean;
   isMissing: boolean; // path does not exist on disk
   stagedChanges: FileChange[];
   unstagedChanges: FileChange[];
   untrackedFiles: string[]; // capped
   untrackedCount: number;
+  inspection?: "available" | "limited" | "unavailable";
+  unavailableReason?: string;
   ahead?: number | null;
   behind?: number | null;
   upstream?: string | null;

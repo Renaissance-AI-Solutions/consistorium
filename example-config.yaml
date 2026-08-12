@@ -1,6 +1,9 @@
 # Context Bridge example configuration
 # Copy to ~/.config/context-bridge/config.yaml or set CONTEXT_BRIDGE_CONFIG
 # Only allowlisted projects are inspected — nothing else is accessible.
+# Structured tasks/handoffs are stored outside these roots by default. Set
+# CONTEXT_BRIDGE_STATE_DIR explicitly when a different local state location is
+# required; there is no generic file-write MCP tool.
 
 version: 1
 
@@ -35,6 +38,7 @@ sessionArtifacts:
 #   maxFileSizeBytes: 262144    # 256 KiB for document reads
 #   maxDiffBytes: 131072        # 128 KiB for compare diffs
 #   maxSearchResults: 100
+#   maxWorktrees: 50
 
 # search:
 #   maxResults: 100

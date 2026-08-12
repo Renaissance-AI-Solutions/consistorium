@@ -24,10 +24,12 @@ We will acknowledge receipt within 72 hours and provide a timeline for a fix.
 
 Context Bridge's threat model and controls are documented in `THREAT_MODEL.md` and summarized in `README.md` and `DESIGN.md`. Key invariants:
 
-- Read-only by default; no repository or worktree mutation
+- Repository/worktree observation is read-only; the only MCP writes are bounded structured task/handoff records
 - Explicit workspace allowlisting with `realpath` canonicalization
 - Denylisted secrets/credentials; bounded outputs; no shell interpolation
-- Only allowlisted `git` subcommands via `execFile` arg arrays
+- Only allowlisted, hardened `git` subcommands via `execFile` arg arrays; helper/config/fsmonitor/textconv paths are disabled
+- State records live under a mode-restricted directory outside configured projects by default; set `CONTEXT_BRIDGE_STATE_DIR` explicitly only when you understand the boundary
+- Assertions in handoffs are never canonical Git truth; inspect `repositoryState.canonical`, `refreshed`, `staleness`, and `mismatches`
 
 If you believe any invariant is violated, please report it as a vulnerability even if you are unsure of exploitability.
 
@@ -37,6 +39,7 @@ If you believe any invariant is violated, please report it as a vulnerability ev
 - Do not allowlist directories that contain secrets you do not want surfaced via context documents or search previews, even though denylists add a second defense layer.
 - Review `context` globs before committing them to a shared/dotfiles repo — they control which files an MCP client can read.
 - MCP clients run `dist/mcp/server.js` locally; ensure the client you use respects the plugin's declared roots and does not proxy Context Bridge data to the network without consent.
+- A fresh agent should discover `context.list_projects` → `context.task_list` → `context.task_get` → `context.handoff_list` → `context.handoff_get`, then verify with the live observation tools. Lists are summaries; detail retrieval is deliberate.
 
 ## Disclosure
 

@@ -89,8 +89,9 @@ describe("git provider", () => {
       const wt = wts.find((w) => w.path === wtDir || w.canonicalPath === canonicalWtDir);
       expect(wt).toBeDefined();
       expect(wt!.branch).toBe("feature");
-      expect(wt!.isDirty).toBe(true);
-      expect(wt!.stagedChanges.length).toBe(1);
+      expect(wt!.inspection).toBe("limited");
+      expect(wt!.isDirty).toBeNull();
+      expect(wt!.stagedChanges.length).toBe(0);
     } finally {
       // remove worktree
       try {
@@ -152,6 +153,19 @@ describe("git provider", () => {
     }
   });
 
+  it("keeps Git command failures explicitly unavailable", async () => {
+    const missing = path.join(repo, "missing-worktree");
+    const observation = await gitProvider.observeRepositoryState(missing);
+    expect(observation.availability).toBe("unavailable");
+    expect(observation.isDirty).toBeNull();
+    expect(observation.error).toBeTruthy();
+
+    const status = await gitProvider.getStatusDetails(missing);
+    expect(status.available).toBe(false);
+    expect(status.staged).toEqual([]);
+    expect(status.unstaged).toEqual([]);
+  });
+
   it("handles path with spaces", async () => {
     const base = await mkdtemp();
     const spaced = path.join(base, "my project with spaces");
@@ -183,6 +197,19 @@ describe("git provider", () => {
     expect(diff).not.toBeNull();
     expect(truncated).toBe(true);
     expect(Buffer.byteLength(diff!, "utf-8")).toBeLessThanOrEqual(120); // plus notice
+  });
+
+  it("does not invoke a repository-configured external diff helper", async () => {
+    await commitFile(repo, "file.txt", "before\n", "init");
+    await fs.promises.writeFile(path.join(repo, "file.txt"), "after\n");
+    const helper = path.join(repo, "external-diff-helper.sh");
+    const marker = path.join(repo, "external-diff-called.marker");
+    await fs.promises.writeFile(helper, `#!/bin/sh\nprintf called > '${marker}'\n`);
+    await fs.promises.chmod(helper, 0o755);
+    await git(repo, ["config", "diff.external", helper]);
+
+    await gitProvider.getBoundedDiff(repo, ["diff", "HEAD"], 1024);
+    await expect(fs.promises.access(marker)).rejects.toThrow();
   });
 
   it("getChangedFileStats returns additions/deletions", async () => {

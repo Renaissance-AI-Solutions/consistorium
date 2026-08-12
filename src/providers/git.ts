@@ -12,6 +12,7 @@ import type { CommitSummary, ChangedFileStat, WorktreeInfo, GitRepoState, FileCh
 import { DEFAULT_LIMITS } from "../core/types.js";
 
 const execFileAsync = promisify(execFile);
+const NULL_DEVICE = process.platform === "win32" ? "NUL" : "/dev/null";
 
 // Allowlisted git subcommands (read-only)
 const ALLOWED_GIT_ARGS = new Set([
@@ -27,7 +28,37 @@ const ALLOWED_GIT_ARGS = new Set([
   "ls-files",
   "remote",
   "config",
+  "rev-list",
 ]);
+
+const HARDENED_GIT_OPTIONS = [
+  "-c", "core.fsmonitor=false",
+  "-c", "core.untrackedCache=false",
+  "-c", `core.hooksPath=${NULL_DEVICE}`,
+  "-c", "diff.external=",
+  "--no-optional-locks",
+];
+
+function hardenedGitEnv(): NodeJS.ProcessEnv {
+  const env: NodeJS.ProcessEnv = { ...process.env };
+  // Do not inherit Git's config, object, helper, pager, SSH, or trace knobs
+  // from the host. The server only needs the repository selected by cwd.
+  for (const key of Object.keys(env)) {
+    if (key.startsWith("GIT_")) delete env[key];
+  }
+  return {
+    ...env,
+    GIT_CONFIG_NOSYSTEM: "1",
+    GIT_CONFIG_SYSTEM: NULL_DEVICE,
+    GIT_CONFIG_GLOBAL: NULL_DEVICE,
+    GIT_ATTR_NOSYSTEM: "1",
+    GIT_OPTIONAL_LOCKS: "0",
+    GIT_TERMINAL_PROMPT: "0",
+    GIT_PAGER: "cat",
+    GIT_EDITOR: "true",
+    GIT_SEQUENCE_EDITOR: "true",
+  };
+}
 
 function isAllowedGitArgs(args: string[]): boolean {
   if (args.length === 0) return false;
@@ -56,12 +87,17 @@ async function gitExec(args: string[], opts: GitExecOptions): Promise<{ stdout: 
     if (denyFlags.includes(a)) throw new Error(`Denied git flag: ${a}`);
   }
 
+  const commandArgs = args[0] === "diff"
+    ? [args[0], "--no-ext-diff", "--no-textconv", ...args.slice(1)]
+    : args;
+  const hardenedArgs = [...HARDENED_GIT_OPTIONS, ...commandArgs];
   try {
-    const result = await execFileAsync("git", args, {
+    const result = await execFileAsync("git", hardenedArgs, {
       cwd: opts.cwd,
       maxBuffer: opts.maxBuffer ?? 10 * 1024 * 1024,
       timeout: opts.timeout ?? 15000,
       encoding: "utf-8",
+      env: hardenedGitEnv(),
     });
     return { stdout: result.stdout as string, stderr: result.stderr as string };
   } catch (e: unknown) {
@@ -124,12 +160,12 @@ export async function getBranch(canonicalPath: string): Promise<{ branch: string
   }
 }
 
-export async function isDirty(canonicalPath: string): Promise<boolean> {
+export async function isDirty(canonicalPath: string): Promise<boolean | null> {
   try {
     const { stdout } = await gitExec(["status", "--porcelain"], { cwd: canonicalPath });
     return stdout.trim().length > 0;
   } catch {
-    return false;
+    return null;
   }
 }
 
@@ -165,41 +201,6 @@ export async function getUpstreamInfo(
     return { upstream: null, ahead: null, behind: null };
   }
 }
-
-// Workaround: add rev-list to allowlist dynamically via separate function
-async function gitExecAllowRevList(args: string[], opts: GitExecOptions) {
-  // Temporary allow rev-list
-  const orig = isAllowedGitArgs(args);
-  if (args[0] === "rev-list") {
-    // Allow rev-list as read-only
-    try {
-      const result = await execFileAsync("git", args, {
-        cwd: opts.cwd,
-        maxBuffer: opts.maxBuffer ?? 10 * 1024 * 1024,
-        timeout: opts.timeout ?? 15000,
-        encoding: "utf-8",
-      });
-      return { stdout: result.stdout as string, stderr: result.stderr as string };
-    } catch (e: unknown) {
-      const err = e as { code?: number; stdout?: string; stderr?: string; message: string };
-      const wrapped: Error & { code?: number; stdout?: string; stderr?: string } = new Error(err.message);
-      wrapped.code = err.code;
-      wrapped.stdout = err.stdout;
-      wrapped.stderr = err.stderr;
-      throw wrapped;
-    }
-  }
-  if (!orig) throw new Error(`Git command not allowlisted: git ${args[0]}`);
-  return gitExec(args, opts);
-}
-
-// Better: just patch ALLOWED_GIT_ARGS to include rev-list at top, but we already defined it.
-// We'll patch via re-export trick: add rev-list to set after definition.
-(ALLOWED_GIT_ARGS as Set<string>).add("rev-list");
-(ALLOWED_GIT_ARGS as Set<string>).add("rev-parse");
-(ALLOWED_GIT_ARGS as Set<string>).add("status");
-(ALLOWED_GIT_ARGS as Set<string>).add("log");
-(ALLOWED_GIT_ARGS as Set<string>).add("diff");
 
 // Correct upstream info using rev-list now that it's allowed
 export async function getUpstreamInfoFixed(
@@ -238,7 +239,7 @@ export async function getUpstreamInfoFixed(
 
 export async function getStatusDetails(
   canonicalPath: string
-): Promise<{ staged: FileChange[]; unstaged: FileChange[]; untracked: string[] }> {
+): Promise<{ staged: FileChange[]; unstaged: FileChange[]; untracked: string[]; available: boolean; error?: string }> {
   const staged: FileChange[] = [];
   const unstaged: FileChange[] = [];
   const untracked: string[] = [];
@@ -271,11 +272,11 @@ export async function getStatusDetails(
         unstaged.push({ path: filePath, status: y, staged: false });
       }
     }
-  } catch {
-    // return empty on error
+    return { staged, unstaged, untracked, available: true };
+  } catch (error) {
+    // Empty changes are not authoritative when status itself failed.
+    return { staged: [], unstaged: [], untracked: [], available: false, error: observationError(error) };
   }
-
-  return { staged, unstaged, untracked };
 }
 
 // ---------------------------------------------------------------------------
@@ -308,6 +309,38 @@ export async function getRecentCommits(
         authorEmail: authorEmail.trim(),
         date: date.trim(),
         parents,
+      };
+    });
+  } catch {
+    return [];
+  }
+}
+
+export async function getCommitsBetween(
+  canonicalPath: string,
+  base: string,
+  target: string,
+  limit = DEFAULT_LIMITS.maxCommitsMax,
+): Promise<CommitSummary[]> {
+  const n = Math.min(Math.max(1, limit), DEFAULT_LIMITS.maxCommitsMax);
+  const format = "%H%x1f%h%x1f%s%x1f%an%x1f%ae%x1f%aI%x1f%P%x1e";
+  try {
+    const { stdout } = await gitExec(["log", `--max-count=${n}`, `--pretty=format:${format}`, `${base}..${target}`], {
+      cwd: canonicalPath,
+      maxBuffer: 5 * 1024 * 1024,
+    });
+    if (!stdout.trim()) return [];
+    return stdout.split("\x1e").filter((record) => record.trim().length > 0).map((record) => {
+      const parts = record.split("\x1f");
+      const [sha = "", shortSha = "", subject = "", author = "", authorEmail = "", date = "", parentsRaw = ""] = parts;
+      return {
+        sha: sha.trim(),
+        shortSha: shortSha.trim(),
+        subject: subject.trim(),
+        author: author.trim(),
+        authorEmail: authorEmail.trim(),
+        date: date.trim(),
+        parents: parentsRaw.trim() ? parentsRaw.trim().split(/\s+/) : [],
       };
     });
   } catch {
@@ -422,7 +455,7 @@ export async function getBoundedDiff(
       return { diff: stdout, truncated: false };
     }
     // Truncate on char boundary
-    let truncated = Buffer.from(stdout, "utf-8").subarray(0, maxBytes).toString("utf-8");
+    const truncated = Buffer.from(stdout, "utf-8").subarray(0, maxBytes).toString("utf-8");
     // Avoid cutting in middle of multi-byte char by re-encoding
     return { diff: truncated + "\n... [truncated]", truncated: true };
   } catch (e) {
@@ -435,7 +468,17 @@ export async function getBoundedDiff(
 // Worktrees
 // ---------------------------------------------------------------------------
 
-export async function listWorktrees(canonicalPath: string): Promise<WorktreeInfo[]> {
+function isWithinPath(root: string, candidate: string): boolean {
+  const relative = path.relative(root, candidate);
+  return relative === "" || (relative !== ".." && !relative.startsWith(`..${path.sep}`) && !path.isAbsolute(relative));
+}
+
+export async function listWorktrees(
+  canonicalPath: string,
+  allowedRoot?: string,
+  maxWorktrees: number = DEFAULT_LIMITS.maxWorktrees
+): Promise<WorktreeInfo[]> {
+  const inspectionRoot = await fs.promises.realpath(allowedRoot ?? canonicalPath).catch(() => path.normalize(allowedRoot ?? canonicalPath));
   // Use `git worktree list --porcelain`
   try {
     const { stdout } = await gitExec(["worktree", "list", "--porcelain"], { cwd: canonicalPath });
@@ -446,7 +489,10 @@ export async function listWorktrees(canonicalPath: string): Promise<WorktreeInfo
     // HEAD <sha>  (or missing if bare?)
     // branch refs/heads/main  (or "detached")
     // bare / detached etc.
-    const blocks = stdout.trim().split("\n\n");
+    const worktreeLimit = Number.isInteger(maxWorktrees)
+      ? Math.max(1, Math.min(maxWorktrees, DEFAULT_LIMITS.maxWorktrees))
+      : DEFAULT_LIMITS.maxWorktrees;
+    const blocks = stdout.trim().split("\n\n").slice(0, worktreeLimit);
     const worktrees: WorktreeInfo[] = [];
 
     // Determine main worktree path (first entry is main)
@@ -493,25 +539,43 @@ export async function listWorktrees(canonicalPath: string): Promise<WorktreeInfo
         isMissing = true;
       }
 
-      // For missing worktrees, skip expensive status calls
-      let isDirtyFlag = false;
+      const inspectable = isWithinPath(inspectionRoot, canonicalWtPath);
+
+      // Missing and externally linked worktrees are metadata-only. In
+      // particular, never run status/upstream commands against an external
+      // path unless it is inside the explicitly configured project root.
+      let isDirtyFlag: boolean | null = null;
+      let inspection: WorktreeInfo["inspection"] = inspectable && !isMissing ? "available" : isMissing ? "unavailable" : "limited";
+      let unavailableReason = isMissing
+        ? "worktree path is missing"
+        : inspectable
+          ? undefined
+          : "linked worktree is outside the explicitly configured project root; metadata only";
       let staged: FileChange[] = [];
       let unstaged: FileChange[] = [];
       let untracked: string[] = [];
-      let headShort: string | null = head ? head.slice(0, 7) : null;
+      const headShort: string | null = head ? head.slice(0, 7) : null;
       let upstream: string | null = null;
       let ahead: number | null = null;
       let behind: number | null = null;
+      let totalUntracked = 0;
 
-      if (!isMissing) {
+      if (!isMissing && inspectable) {
         try {
           const status = await getStatusDetails(canonicalWtPath);
-          staged = status.staged;
-          unstaged = status.unstaged;
-          untracked = status.untracked.slice(0, DEFAULT_LIMITS.maxUntrackedPreview);
-          isDirtyFlag = staged.length > 0 || unstaged.length > 0 || status.untracked.length > 0;
+          if (status.available) {
+            staged = status.staged;
+            unstaged = status.unstaged;
+            untracked = status.untracked.slice(0, DEFAULT_LIMITS.maxUntrackedPreview);
+            totalUntracked = status.untracked.length;
+            isDirtyFlag = staged.length > 0 || unstaged.length > 0 || totalUntracked > 0;
+          } else {
+            inspection = "unavailable";
+            unavailableReason = status.error ?? "git status unavailable";
+          }
         } catch {
-          // ignore
+          inspection = "unavailable";
+          unavailableReason = "git status unavailable";
         }
         try {
           const up = await getUpstreamInfoFixed(canonicalWtPath);
@@ -533,79 +597,172 @@ export async function listWorktrees(canonicalPath: string): Promise<WorktreeInfo
         isDirty: isDirtyFlag,
         isMain,
         isMissing,
+        inspection,
+        unavailableReason,
         stagedChanges: staged,
         unstagedChanges: unstaged,
         untrackedFiles: untracked,
-        untrackedCount: untracked.length, // will be corrected if truncated
+        untrackedCount: totalUntracked,
         ahead,
         behind,
         upstream,
         provenance: { observedAt: new Date().toISOString() },
       });
 
-      // Fix untrackedCount to include total, not just preview
-      // We sliced above, so we need total count. Re-use status if available.
-      // For simplicity, untrackedCount is preview length unless we know total.
-      // We'll fetch total separately if needed: but staged/unstaged already captured total in array lengths before slice.
-      // Actually we sliced untracked, so last worktree's untrackedCount is preview length.
-      // Let's correct: need total untracked count.
-      if (!isMissing) {
-        try {
-          const { stdout } = await gitExec(["status", "--porcelain=v1", "-uall"], { cwd: canonicalWtPath });
-          let total = 0;
-          for (const l of stdout.split("\n")) if (l.startsWith("??")) total++;
-          worktrees[worktrees.length - 1]!.untrackedCount = total;
-        } catch { /* keep preview length */ }
-      }
     }
 
     return worktrees;
-  } catch {
-    // Fallback: single worktree is the repo itself
-    const branchInfo = await getBranch(canonicalPath);
-    const head = await getHeadCommit(canonicalPath);
-    const dirty = await isDirty(canonicalPath);
-    const status = await getStatusDetails(canonicalPath);
-    const up = await getUpstreamInfoFixed(canonicalPath).catch(() => ({ upstream: null, ahead: null, behind: null }));
-    let canonicalWtPath: string;
-    try {
-      canonicalWtPath = await fs.promises.realpath(canonicalPath);
-    } catch {
-      canonicalWtPath = path.normalize(canonicalPath);
+  } catch (listError) {
+    // If worktree metadata cannot be listed, return one explicit observation
+    // rather than synthesizing a clean/empty worktree from best-effort calls.
+    const observed = await observeRepositoryState(canonicalPath, allowedRoot);
+    const canonicalWtPath = observed.worktreePath;
+    return [{
+      path: canonicalPath,
+      canonicalPath: canonicalWtPath,
+      branch: observed.branch,
+      headCommit: observed.head,
+      headCommitShort: observed.head ? observed.head.slice(0, 7) : null,
+      isDetached: observed.isDetached === true,
+      isDirty: observed.availability === "available" ? observed.isDirty : null,
+      isMain: true,
+      isMissing: false,
+      inspection: observed.availability === "available" ? "limited" : "unavailable",
+      unavailableReason: observed.availability === "available"
+        ? `worktree metadata unavailable: ${observationError(listError)}`
+        : observed.error ?? "canonical Git observation unavailable",
+      stagedChanges: [],
+      unstagedChanges: [],
+      untrackedFiles: [],
+      untrackedCount: 0,
+      ahead: null,
+      behind: null,
+      upstream: null,
+      provenance: { observedAt: observed.observedAt },
+    }];
+  }
+}
+
+export interface RepositoryObservation {
+  availability: "available" | "not_git" | "unavailable";
+  observedAt: string;
+  repositoryPath: string | null;
+  worktreePath: string;
+  branch: string | null;
+  head: string | null;
+  isDetached?: boolean | null;
+  isDirty: boolean | null;
+  error?: string;
+}
+
+function normalizedRealpath(value: string): string {
+  return path.normalize(value).replace(/\\+$/, "") || path.parse(value).root;
+}
+
+function observationError(error: unknown): string {
+  const candidate = error as { stderr?: string; message?: string };
+  return (candidate.stderr || candidate.message || String(error)).trim().slice(0, 500);
+}
+
+function isNotGitError(error: unknown): boolean {
+  const detail = observationError(error).toLowerCase();
+  return detail.includes("not a git repository") || detail.includes("cannot change to") || detail.includes("does not appear to be a git repository");
+}
+
+/**
+ * Canonical, all-or-unavailable observation used by durable handoffs.
+ * Individual legacy helpers intentionally remain best-effort for compatibility,
+ * but this function never turns a failed command into a clean/empty state.
+ */
+export async function observeRepositoryState(worktreePath: string, configuredRoot?: string): Promise<RepositoryObservation> {
+  const requested = await fs.promises.realpath(worktreePath).catch(() => normalizedRealpath(worktreePath));
+  const resolvedConfiguredRoot = configuredRoot
+    ? await fs.promises.realpath(configuredRoot).catch(() => normalizedRealpath(configuredRoot))
+    : undefined;
+  const observedAt = new Date().toISOString();
+  if (resolvedConfiguredRoot && !isWithinPath(resolvedConfiguredRoot, requested)) {
+    return {
+      availability: "unavailable",
+      observedAt,
+      repositoryPath: resolvedConfiguredRoot,
+      worktreePath: requested,
+      branch: null,
+      head: null,
+      isDirty: null,
+      error: "worktree is outside the explicitly configured project root",
+    };
+  }
+
+  try {
+    const inside = (await gitExec(["rev-parse", "--is-inside-work-tree"], { cwd: requested })).stdout.trim();
+    if (inside !== "true") {
+      return {
+        availability: "not_git",
+        observedAt,
+        repositoryPath: null,
+        worktreePath: requested,
+        branch: null,
+        head: null,
+        isDirty: null,
+        error: "path is not a git worktree",
+      };
     }
-    return [
-      {
-        path: canonicalPath,
-        canonicalPath: canonicalWtPath,
-        branch: branchInfo.branch,
-        headCommit: head,
-        headCommitShort: head ? head.slice(0, 7) : null,
-        isDetached: branchInfo.detached,
-        isDirty: dirty,
-        isMain: true,
-        isMissing: false,
-        stagedChanges: status.staged,
-        unstagedChanges: status.unstaged,
-        untrackedFiles: status.untracked.slice(0, DEFAULT_LIMITS.maxUntrackedPreview),
-        untrackedCount: status.untracked.length,
-        ahead: up.ahead,
-        behind: up.behind,
-        upstream: up.upstream,
-        provenance: { observedAt: new Date().toISOString() },
-      },
-    ];
+
+    const root = normalizedRealpath((await gitExec(["rev-parse", "--show-toplevel"], { cwd: requested })).stdout.trim());
+    const branchRaw = (await gitExec(["rev-parse", "--abbrev-ref", "HEAD"], { cwd: requested })).stdout.trim();
+    const head = (await gitExec(["rev-parse", "HEAD"], { cwd: requested })).stdout.trim() || null;
+    const status = (await gitExec(["status", "--porcelain=v1", "-uall"], { cwd: requested })).stdout;
+    return {
+      availability: "available",
+      observedAt,
+      repositoryPath: root,
+      worktreePath: requested,
+      branch: branchRaw === "HEAD" ? null : branchRaw || null,
+      head,
+      isDetached: branchRaw === "HEAD",
+      isDirty: status.length > 0,
+    };
+  } catch (error) {
+    return {
+      availability: isNotGitError(error) ? "not_git" : "unavailable",
+      observedAt,
+      repositoryPath: resolvedConfiguredRoot ?? null,
+      worktreePath: requested,
+      branch: null,
+      head: null,
+      isDirty: null,
+      error: observationError(error),
+    };
   }
 }
 
 export async function getRepoState(canonicalPath: string, recentLimit: number = 10): Promise<GitRepoState | null> {
-  if (!(await isGitRepo(canonicalPath))) return null;
-  const branchInfo = await getBranch(canonicalPath);
-  const head = await getHeadCommit(canonicalPath);
-  const dirty = await isDirty(canonicalPath);
+  const observed = await observeRepositoryState(canonicalPath);
+  if (observed.availability !== "available") {
+    return observed.availability === "not_git"
+      ? null
+      : {
+          availability: observed.availability,
+          error: observed.error,
+          branch: null,
+          headCommit: null,
+          headCommitShort: null,
+          isDetached: false,
+          isDirty: null,
+          ahead: null,
+          behind: null,
+          upstream: null,
+          recentCommits: [],
+        };
+  }
+  const branchInfo = { branch: observed.branch, detached: observed.isDetached === true };
+  const head = observed.head;
+  const dirty = observed.isDirty;
   const recent = await getRecentCommits(canonicalPath, recentLimit);
   const up = await getUpstreamInfoFixed(canonicalPath).catch(() => ({ upstream: null, ahead: null, behind: null }));
 
   return {
+    availability: "available",
     branch: branchInfo.branch,
     headCommit: head,
     headCommitShort: head ? head.slice(0, 7) : null,

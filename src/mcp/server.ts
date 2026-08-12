@@ -9,6 +9,7 @@
  */
 import { Server } from "@modelcontextprotocol/sdk/server/index.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
+import { z } from "zod";
 import {
   CallToolRequestSchema,
   ListToolsRequestSchema,
@@ -19,6 +20,15 @@ import {
 import { loadConfigSync, resolveConfigSync, findConfigFile } from "../core/config.js";
 import { SecurityPolicy } from "../core/security.js";
 import { ContextService } from "../core/context.js";
+import {
+  ContinuityStore,
+  CreateHandoffInputSchema,
+  GetHandoffInputSchema,
+  GetTaskInputSchema,
+  ListHandoffsInputSchema,
+  ListTasksInputSchema,
+  UpsertTaskInputSchema,
+} from "../core/continuity.js";
 import { TOOL_DEFS } from "./tools.js";
 import type { ResolvedConfig } from "../core/types.js";
 
@@ -26,7 +36,7 @@ import type { ResolvedConfig } from "../core/types.js";
 // Bootstrap config
 // ---------------------------------------------------------------------------
 
-function bootstrap(): { config: ResolvedConfig; policy: SecurityPolicy; service: ContextService } {
+function bootstrap(): { config: ResolvedConfig; policy: SecurityPolicy; service: ContextService; continuity: ContinuityStore } {
   const explicit = process.env.CONTEXT_BRIDGE_CONFIG;
   const foundPath = explicit ? explicit : findConfigFile() ?? null;
 
@@ -73,20 +83,61 @@ function bootstrap(): { config: ResolvedConfig; policy: SecurityPolicy; service:
   // If no projects, allow no roots (policy will deny everything — tools will explain)
   const policy = new SecurityPolicy(roots.length ? roots : ["/tmp/context-bridge-empty"]);
   const service = new ContextService(resolved, policy);
+  const continuity = new ContinuityStore(resolved);
 
-  return { config: resolved, policy, service };
+  return { config: resolved, policy, service, continuity };
 }
 
 // ---------------------------------------------------------------------------
 // Error formatting
 // ---------------------------------------------------------------------------
 
-function toMcpError(e: unknown): { code: string; message: string } {
-  const err = e as Error & { code?: string };
+function toMcpError(e: unknown): { code: string; message: string; details?: unknown } {
+  const err = e as Error & { code?: string; details?: unknown };
   return {
     code: err.code ?? "INTERNAL_ERROR",
     message: err.message ?? String(e),
+    details: err.details,
   };
+}
+
+function parseArgs<T extends z.ZodTypeAny>(schema: T, raw: Record<string, unknown>): z.infer<T> {
+  const result = schema.safeParse(raw);
+  if (result.success) return result.data as z.infer<T>;
+  const details = result.error.issues.map((issue) => ({ path: issue.path, code: issue.code, message: issue.message }));
+  throw Object.assign(new Error("invalid tool arguments"), { code: "INVALID_ARG", details });
+}
+
+function requiredString(args: Record<string, unknown>, key: string): string {
+  const value = args[key];
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throw Object.assign(new Error(`${key} must be a non-empty string`), { code: "INVALID_ARG" });
+  }
+  return value;
+}
+
+function optionalInteger(args: Record<string, unknown>, key: string, min?: number, max?: number): number | undefined {
+  const value = args[key];
+  if (value === undefined) return undefined;
+  if (typeof value !== "number" || !Number.isInteger(value)) {
+    throw Object.assign(new Error(`${key} must be an integer`), { code: "INVALID_ARG" });
+  }
+  if (min !== undefined && value < min) {
+    throw Object.assign(new Error(`${key} must be at least ${min}`), { code: "INVALID_ARG" });
+  }
+  if (max !== undefined && value > max) {
+    throw Object.assign(new Error(`${key} must be at most ${max}`), { code: "INVALID_ARG" });
+  }
+  return value;
+}
+
+function optionalBoolean(args: Record<string, unknown>, key: string): boolean | undefined {
+  const value = args[key];
+  if (value === undefined) return undefined;
+  if (typeof value !== "boolean") {
+    throw Object.assign(new Error(`${key} must be a boolean`), { code: "INVALID_ARG" });
+  }
+  return value;
 }
 
 function noConfigMessage(config: ResolvedConfig): string {
@@ -102,7 +153,7 @@ function noConfigMessage(config: ResolvedConfig): string {
 // ---------------------------------------------------------------------------
 
 async function main() {
-  const { config, service } = bootstrap();
+  const { config, service, continuity } = bootstrap();
 
   const server = new Server(
     {
@@ -154,6 +205,42 @@ async function main() {
           };
         }
 
+        case "context.task_upsert": {
+          const input = parseArgs(UpsertTaskInputSchema, a);
+          const task = await continuity.upsertTask(input);
+          return { content: [{ type: "text", text: JSON.stringify({ task }, null, 2) }] };
+        }
+
+        case "context.task_list": {
+          const input = parseArgs(ListTasksInputSchema, a);
+          const result = await continuity.listTasks(input);
+          return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+        }
+
+        case "context.task_get": {
+          const input = parseArgs(GetTaskInputSchema, a);
+          const task = await continuity.getTask(input);
+          return { content: [{ type: "text", text: JSON.stringify({ task }, null, 2) }] };
+        }
+
+        case "context.handoff_create": {
+          const input = parseArgs(CreateHandoffInputSchema, a);
+          const handoff = await continuity.createHandoff(input);
+          return { content: [{ type: "text", text: JSON.stringify({ handoff }, null, 2) }] };
+        }
+
+        case "context.handoff_list": {
+          const input = parseArgs(ListHandoffsInputSchema, a);
+          const result = await continuity.listHandoffs(input);
+          return { content: [{ type: "text", text: JSON.stringify(result, null, 2) }] };
+        }
+
+        case "context.handoff_get": {
+          const input = parseArgs(GetHandoffInputSchema, a);
+          const handoff = await continuity.getHandoff(input);
+          return { content: [{ type: "text", text: JSON.stringify({ handoff }, null, 2) }] };
+        }
+
         case "context.project_snapshot": {
           if (isNoConfig) {
             return {
@@ -161,17 +248,17 @@ async function main() {
               isError: true,
             };
           }
-          const project = String(a.project ?? "");
+          const project = requiredString(a, "project");
           if (!project) throw Object.assign(new Error("project is required"), { code: "INVALID_ARG" });
-          const recentLimit = a.recentLimit !== undefined ? Number(a.recentLimit) : undefined;
-          const includeSessions = a.includeSessions !== undefined ? Boolean(a.includeSessions) : true;
+          const recentLimit = optionalInteger(a, "recentLimit", 1, 100);
+          const includeSessions = optionalBoolean(a, "includeSessions") ?? true;
           const snap = await service.projectSnapshot(project, { recentLimit, includeSessions });
           return { content: [{ type: "text", text: JSON.stringify(snap, null, 2) }] };
         }
 
         case "context.list_worktrees": {
           if (isNoConfig) return { content: [{ type: "text", text: JSON.stringify({ error: noConfigMessage(config) }, null, 2) }], isError: true };
-          const project = String(a.project ?? "");
+          const project = requiredString(a, "project");
           if (!project) throw Object.assign(new Error("project is required"), { code: "INVALID_ARG" });
           const wts = await service.listWorktrees(project);
           return {
@@ -186,8 +273,8 @@ async function main() {
 
         case "context.worktree_snapshot": {
           if (isNoConfig) return { content: [{ type: "text", text: JSON.stringify({ error: noConfigMessage(config) }, null, 2) }], isError: true };
-          const project = String(a.project ?? "");
-          const wtPath = String(a.path ?? "");
+          const project = requiredString(a, "project");
+          const wtPath = requiredString(a, "path");
           if (!project || !wtPath) throw Object.assign(new Error("project and path are required"), { code: "INVALID_ARG" });
           const snap = await service.worktreeSnapshot(project, wtPath);
           return { content: [{ type: "text", text: JSON.stringify(snap, null, 2) }] };
@@ -195,11 +282,11 @@ async function main() {
 
         case "context.recent_changes": {
           if (isNoConfig) return { content: [{ type: "text", text: JSON.stringify({ error: noConfigMessage(config) }, null, 2) }], isError: true };
-          const project = String(a.project ?? "");
+          const project = requiredString(a, "project");
           if (!project) throw Object.assign(new Error("project is required"), { code: "INVALID_ARG" });
-          const limit = a.limit !== undefined ? Number(a.limit) : undefined;
-          const worktreePath = a.worktreePath ? String(a.worktreePath) : undefined;
-          const includeDiffStat = a.includeDiffStat !== undefined ? Boolean(a.includeDiffStat) : true;
+          const limit = optionalInteger(a, "limit", 1, 100);
+          const worktreePath = a.worktreePath !== undefined ? requiredString(a, "worktreePath") : undefined;
+          const includeDiffStat = optionalBoolean(a, "includeDiffStat") ?? true;
           const rc = await service.recentChanges(project, { limit, worktreePath, includeDiffStat });
           return {
             content: [
@@ -213,31 +300,31 @@ async function main() {
 
         case "context.compare": {
           if (isNoConfig) return { content: [{ type: "text", text: JSON.stringify({ error: noConfigMessage(config) }, null, 2) }], isError: true };
-          const project = String(a.project ?? "");
-          const base = String(a.base ?? "");
-          const target = String(a.target ?? "");
+          const project = requiredString(a, "project");
+          const base = requiredString(a, "base");
+          const target = requiredString(a, "target");
           if (!project || !base || !target) throw Object.assign(new Error("project, base, and target are required"), { code: "INVALID_ARG" });
-          const includeDiff = Boolean(a.includeDiff);
-          const maxDiffBytes = a.maxDiffBytes !== undefined ? Number(a.maxDiffBytes) : undefined;
-          const worktreePath = a.worktreePath ? String(a.worktreePath) : undefined;
+          const includeDiff = optionalBoolean(a, "includeDiff") ?? false;
+          const maxDiffBytes = optionalInteger(a, "maxDiffBytes", 1024, 500 * 1024);
+          const worktreePath = a.worktreePath !== undefined ? requiredString(a, "worktreePath") : undefined;
           const cmp = await service.compare(project, base, target, { includeDiff, maxDiffBytes, worktreePath });
           return { content: [{ type: "text", text: JSON.stringify(cmp, null, 2) }] };
         }
 
         case "context.search": {
           if (isNoConfig) return { content: [{ type: "text", text: JSON.stringify({ error: noConfigMessage(config) }, null, 2) }], isError: true };
-          const project = String(a.project ?? "");
-          const query = String(a.query ?? "");
+          const project = requiredString(a, "project");
+          const query = requiredString(a, "query");
           if (!project || !query) throw Object.assign(new Error("project and query are required"), { code: "INVALID_ARG" });
-          const maxResults = a.maxResults !== undefined ? Number(a.maxResults) : undefined;
-          const caseSensitive = a.caseSensitive !== undefined ? Boolean(a.caseSensitive) : undefined;
+          const maxResults = optionalInteger(a, "maxResults", 1, 500);
+          const caseSensitive = optionalBoolean(a, "caseSensitive");
           const res = await service.search(project, query, { maxResults, caseSensitive });
           return { content: [{ type: "text", text: JSON.stringify(res, null, 2) }] };
         }
 
         case "context.list_context_documents": {
           if (isNoConfig) return { content: [{ type: "text", text: JSON.stringify({ error: noConfigMessage(config) }, null, 2) }], isError: true };
-          const project = String(a.project ?? "");
+          const project = requiredString(a, "project");
           if (!project) throw Object.assign(new Error("project is required"), { code: "INVALID_ARG" });
           const docs = await service.listContextDocuments(project);
           return {
@@ -252,17 +339,17 @@ async function main() {
 
         case "context.read_context_document": {
           if (isNoConfig) return { content: [{ type: "text", text: JSON.stringify({ error: noConfigMessage(config) }, null, 2) }], isError: true };
-          const project = String(a.project ?? "");
-          const docPath = String(a.path ?? "");
+          const project = requiredString(a, "project");
+          const docPath = requiredString(a, "path");
           if (!project || !docPath) throw Object.assign(new Error("project and path are required"), { code: "INVALID_ARG" });
-          const maxBytes = a.maxBytes !== undefined ? Number(a.maxBytes) : undefined;
+          const maxBytes = optionalInteger(a, "maxBytes", 1, 1024 * 1024);
           const content = await service.readContextDocument(project, docPath, { maxBytes });
           return { content: [{ type: "text", text: JSON.stringify(content, null, 2) }] };
         }
 
         case "context.list_agent_sessions": {
           // list_agent_sessions works even with no config (returns empty)
-          const project = a.project ? String(a.project) : undefined;
+          const project = a.project !== undefined ? requiredString(a, "project") : undefined;
           const sessions = await service.listAgentSessions(project);
           return {
             content: [
@@ -275,7 +362,7 @@ async function main() {
         }
 
         case "context.session_snapshot": {
-          const id = String(a.id ?? "");
+          const id = requiredString(a, "id");
           if (!id) throw Object.assign(new Error("id is required"), { code: "INVALID_ARG" });
           const snap = await service.sessionSnapshot(id);
           if (!snap) {
@@ -297,7 +384,7 @@ async function main() {
       const err = toMcpError(e);
       // Return as MCP error content, not thrown, so the client gets structured JSON
       return {
-        content: [{ type: "text", text: JSON.stringify({ error: err.message, code: err.code }, null, 2) }],
+        content: [{ type: "text", text: JSON.stringify({ error: err.message, code: err.code, details: err.details }, null, 2) }],
         isError: true,
       };
     }

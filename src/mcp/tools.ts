@@ -4,6 +4,7 @@
  */
 // We avoid depending on zod-to-json-schema lib to keep deps minimal; we inline a tiny converter below.
 // Actually we generate JSON Schema manually for control.
+import { SAFE_ID_PATTERN } from "../core/types.js";
 
 export interface ToolDef {
   name: string;
@@ -45,17 +46,18 @@ export const TOOL_DEFS: ToolDef[] = [
   },
   {
     name: "context.task_upsert",
-    description: "Create or update one bounded durable task record outside inspected repositories.",
+    description: "Create or safely update one bounded durable task record outside inspected repositories; existing tasks require the current expectedUpdatedAt version.",
     inputSchema: {
       type: "object",
       additionalProperties: false,
       required: ["project", "taskId", "title", "objective", "state"],
       properties: {
-        project: { type: "string", pattern: "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$" },
-        taskId: { type: "string", pattern: "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$" },
+        project: { type: "string", pattern: SAFE_ID_PATTERN },
+        taskId: { type: "string", pattern: SAFE_ID_PATTERN },
         title: { type: "string", minLength: 1, maxLength: 500 },
         objective: { type: "string", minLength: 1, maxLength: 4000 },
         state: { type: "string", enum: ["open", "in_progress", "blocked", "ready_for_review", "complete", "cancelled"] },
+        expectedUpdatedAt: { type: "string", maxLength: 64, description: "Required when updating an existing task; use the updatedAt returned by task_get or task_upsert." },
         constraints: { type: "array", maxItems: 50, items: { type: "string", minLength: 1, maxLength: 4000 } },
         nextActions: { type: "array", maxItems: 50, items: { type: "string", minLength: 1, maxLength: 4000 } },
         provenance: {
@@ -65,7 +67,7 @@ export const TOOL_DEFS: ToolDef[] = [
             name: { type: "string", maxLength: 500 },
             harness: { type: "string", maxLength: 500 },
             model: { type: "string", maxLength: 500 },
-            sessionId: { type: "string", pattern: "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$" },
+            sessionId: { type: "string", pattern: SAFE_ID_PATTERN },
           },
         },
       },
@@ -78,7 +80,7 @@ export const TOOL_DEFS: ToolDef[] = [
       type: "object",
       additionalProperties: false,
       properties: {
-        project: { type: "string", pattern: "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$" },
+        project: { type: "string", pattern: SAFE_ID_PATTERN },
         state: { type: "string", minLength: 1, maxLength: 64 },
         limit: { type: "integer", minimum: 1, maximum: 100, default: 20 },
       },
@@ -92,8 +94,8 @@ export const TOOL_DEFS: ToolDef[] = [
       additionalProperties: false,
       required: ["project", "taskId"],
       properties: {
-        project: { type: "string", pattern: "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$" },
-        taskId: { type: "string", pattern: "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$" },
+        project: { type: "string", pattern: SAFE_ID_PATTERN },
+        taskId: { type: "string", pattern: SAFE_ID_PATTERN },
       },
     },
   },
@@ -105,9 +107,9 @@ export const TOOL_DEFS: ToolDef[] = [
       additionalProperties: false,
       required: ["project", "taskId", "status", "summary"],
       properties: {
-        project: { type: "string", pattern: "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$" },
-        taskId: { type: "string", pattern: "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$" },
-        handoffId: { type: "string", pattern: "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$" },
+        project: { type: "string", pattern: SAFE_ID_PATTERN },
+        taskId: { type: "string", pattern: SAFE_ID_PATTERN },
+        handoffId: { type: "string", pattern: SAFE_ID_PATTERN },
         worktreePath: { type: "string", minLength: 1, maxLength: 4000 },
         agent: {
           type: "object",
@@ -116,7 +118,7 @@ export const TOOL_DEFS: ToolDef[] = [
             name: { type: "string", maxLength: 500 },
             harness: { type: "string", maxLength: 500 },
             model: { type: "string", maxLength: 500 },
-            sessionId: { type: "string", pattern: "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$" },
+            sessionId: { type: "string", pattern: SAFE_ID_PATTERN },
           },
         },
         status: { type: "string", enum: ["in_progress", "ready_for_review", "blocked", "complete", "cancelled"] },
@@ -161,8 +163,8 @@ export const TOOL_DEFS: ToolDef[] = [
       type: "object",
       additionalProperties: false,
       properties: {
-        project: { type: "string", pattern: "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$" },
-        taskId: { type: "string", pattern: "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$" },
+        project: { type: "string", pattern: SAFE_ID_PATTERN },
+        taskId: { type: "string", pattern: SAFE_ID_PATTERN },
         limit: { type: "integer", minimum: 1, maximum: 100, default: 20 },
       },
     },
@@ -175,8 +177,8 @@ export const TOOL_DEFS: ToolDef[] = [
       additionalProperties: false,
       required: ["project", "handoffId"],
       properties: {
-        project: { type: "string", pattern: "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$" },
-        handoffId: { type: "string", pattern: "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$" },
+        project: { type: "string", pattern: SAFE_ID_PATTERN },
+        handoffId: { type: "string", pattern: SAFE_ID_PATTERN },
       },
     },
   },

@@ -16,6 +16,13 @@ export interface RawConfig {
   limits?: LimitsConfig;
 }
 
+// Project names, task IDs, and handoff IDs share one portable identifier
+// contract. Keeping the pattern here prevents config and continuity from
+// accepting different names for the same logical project.
+export const SAFE_ID_PATTERN = "^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$";
+export const SAFE_ID_REGEX = new RegExp(SAFE_ID_PATTERN);
+export const SAFE_ID_MESSAGE = "must be a safe identifier (letters, numbers, ., _, -)";
+
 export interface RawProjectConfig {
   name: string;
   path: string;

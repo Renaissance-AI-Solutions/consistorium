@@ -17,14 +17,14 @@ import * as os from "node:os";
 import * as yaml from "yaml";
 import { z } from "zod";
 import type { ResolvedConfig, ResolvedProject, RawConfig } from "./types.js";
-import { DEFAULT_LIMITS } from "./types.js";
+import { DEFAULT_LIMITS, SAFE_ID_MESSAGE, SAFE_ID_REGEX } from "./types.js";
 
 // ---------------------------------------------------------------------------
 // Zod schemas
 // ---------------------------------------------------------------------------
 
 const ProjectSchema = z.object({
-  name: z.string().min(1).max(128),
+  name: z.string().min(1).max(128).regex(SAFE_ID_REGEX, SAFE_ID_MESSAGE),
   path: z.string().min(1),
   context: z.array(z.string().min(1)).optional().default([]),
 });
@@ -53,6 +53,12 @@ const ConfigSchema = z.object({
     })
     .optional(),
 });
+
+function assertProjectName(name: string): void {
+  if (!SAFE_ID_REGEX.test(name)) {
+    throw new Error(`Invalid project name "${name}": ${SAFE_ID_MESSAGE}`);
+  }
+}
 
 // ---------------------------------------------------------------------------
 // File discovery
@@ -159,6 +165,7 @@ export async function resolveConfig(raw: RawConfig, configPath: string): Promise
   const resolvedProjects: ResolvedProject[] = [];
 
   for (const p of raw.projects) {
+    assertProjectName(p.name);
     if (seenNames.has(p.name)) {
       throw new Error(`Duplicate project name: ${p.name}`);
     }
@@ -223,6 +230,7 @@ export function resolveConfigSync(raw: RawConfig, configPath: string): ResolvedC
   const resolvedProjects: ResolvedProject[] = [];
 
   for (const p of raw.projects) {
+    assertProjectName(p.name);
     if (seenNames.has(p.name)) {
       throw new Error(`Duplicate project name: ${p.name}`);
     }

@@ -55,7 +55,7 @@ Alternatives considered:
 - **Auto-discover repos under `$HOME`** — rejected: too permissive, violates least privilege.
 - **`CONTEXT_BRIDGE_CONFIG` env only** — kept as override, but discoverability matters for plugin installs (`PLUGIN_DATA`).
 
-Chose: **explicit `projects[].path` in YAML/JSON config** resolved with canonical realpath checks, with CLI `init` that forces the user to approve each root. Defaults are secure (no project → no repository access). Search order prefers `$CONTEXT_BRIDGE_CONFIG`, `$PLUGIN_DATA`, and XDG so plugin installs don't pollute `cwd`. Continuity state is derived from `CONTEXT_BRIDGE_STATE_DIR` or the config directory and is moved to a sibling/fallback location if the config lives inside a configured project.
+Chose: **explicit `projects[].path` in YAML/JSON config** resolved with canonical realpath checks, with CLI `init` that forces the user to approve each root. Defaults are secure (no project → no repository access). Search order prefers `$CONTEXT_BRIDGE_CONFIG`, `$PLUGIN_DATA`, and XDG so plugin installs don't pollute `cwd`. Configured project names use the same portable safe-identifier contract as task and handoff IDs. Continuity state is derived from `CONTEXT_BRIDGE_STATE_DIR` or an unprivileged XDG/home/temp location outside configured project roots.
 
 ### 3.4 Security as policy object
 
@@ -91,7 +91,7 @@ Instead of requiring 20 tool calls to answer "what's going on?", `context.projec
 - `tasks`: stable safe task ID, project identity, title, objective, state, constraints, next actions, timestamps, and provenance.
 - `handoffs`: project/task identity, agent provenance, status, summary, findings, structured validation, decisions, blockers, next actions, relevant files/commits, and repository state.
 
-The default state root is not a project root. Directory and record modes are `0700` and `0600`; records are bounded and written through same-directory temp-file + rename. IDs are validated and storage filenames are hashes, so an MCP argument cannot become a path.
+The default state root is not a project root. Directory and record modes are `0700` and `0600`; records are bounded and written through same-directory temp-file + rename. IDs are validated and storage filenames are hashes, so an MCP argument cannot become a path. Within one stdio process, writes to each logical task or handoff record are serialized. New tasks are created without a version; existing task updates require the current `updatedAt` as `expectedUpdatedAt`, and duplicate explicit handoff IDs return a structured conflict instead of overwriting. Cross-process coordination is a P2 because this local store has no database or OS-wide lock.
 
 Handoff repository state is deliberately split:
 
@@ -203,7 +203,7 @@ example-config.yaml       annotated starter config
 Status (2026-08-11): **conformant**.
 
 - `plugin.json` validates against `https://agent-plugins.org/schemas/1.0.0/plugin.schema.json` (`$schema` exact, `name` satisfies `^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$` without `--`/`..`, only allowlisted top-level fields).
-- `mcp.json` validates against `https://agent-plugins.org/schemas/1.0.0/mcp.schema.json` — `mcpServers` with `type: "stdio"`, `command: "./dist/mcp/server.js"` (plugin-relative), `cwd: "${PLUGIN_ROOT}"`. No `PLUGIN_ROOT`/`PLUGIN_DATA` in `env` keys. `args`/`env`/`cwd` expansion is host-handled.
+- `mcp.json` validates against `https://agent-plugins.org/schemas/1.0.0/mcp.schema.json` — `mcpServers` with `type: "stdio"`, `command: "node"`, `args: ["./dist/mcp/server.js"]`, and `cwd: "${PLUGIN_ROOT}"`. No `PLUGIN_ROOT`/`PLUGIN_DATA` in `env` keys. `args`/`env`/`cwd` expansion is host-handled.
 - Skills at fixed `skills/*/SKILL.md` (no recursion).
 - No `plugin.json` inline `mcpServers`; no alternative component discovery.
 - `PLUGIN_ROOT` / `PLUGIN_DATA` semantics (spec §9) are left to the hosting client — the server reads `CONTEXT_BRIDGE_CONFIG`, `PLUGIN_DATA`, and XDG in that order, which is compatible.
@@ -223,7 +223,7 @@ If the published spec evolves, `plugin.json` / `mcp.json` are the only files tha
 |-----------|----------|-----------|
 | Config format | YAML primary, JSON also accepted; `yaml` lib parses both | YAML is more human-friendly for `init`; JSON keeps machine writers happy |
 | Session adapter in v0.1 | Generic glob-based adapter only; no deep reverse-engineering of Codex/Claude storage | Keeps MVP vendor-neutral and useful without private formats; interface is ready for adapters |
-| `mcp.json` command | `./dist/mcp/server.js` with shebang + `chmod +x` | Most portable for stdio; falls back to `node dist/mcp/server.js` via host |
+| `mcp.json` command | `node` with `args: ["./dist/mcp/server.js"]` | Avoids executable-bit assumptions while keeping the entrypoint plugin-relative |
 | Worktree ahead/behind | `rev-list --left-right --count HEAD...@{u}` when upstream exists | Safely derivable locally without network; null when no upstream |
 | Diff inclusion | Off by default; bounded and `truncated` when on | Prevents context-window abuse |
 | Search semantics | Plain-text, not regex/semantic, bounded per file | Sufficient for v0.1; regex can be added later without breaking change |

@@ -9,6 +9,7 @@ import * as fs from "node:fs";
 import * as os from "node:os";
 import * as path from "node:path";
 import { z } from "zod";
+import { SAFE_ID_MESSAGE, SAFE_ID_REGEX } from "./types.js";
 import type { ResolvedConfig, ResolvedProject } from "./types.js";
 import { observeRepositoryState, type RepositoryObservation } from "../providers/git.js";
 
@@ -17,9 +18,8 @@ const MAX_SHORT_STRING = 500;
 const MAX_ITEMS = 50;
 const MAX_RECORD_BYTES = 256 * 1024;
 const MAX_STORED_RECORDS = 500;
-const SAFE_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/;
-
-export const SafeIdSchema = z.string().regex(SAFE_ID, "must be a safe identifier (letters, numbers, ., _, -)");
+const recordLocks = new Map<string, Promise<void>>();
+export const SafeIdSchema = z.string().regex(SAFE_ID_REGEX, SAFE_ID_MESSAGE);
 const BoundedString = z.string().trim().min(1).max(MAX_STRING);
 const ShortString = z.string().trim().min(1).max(MAX_SHORT_STRING);
 const BoundedList = z.array(BoundedString).max(MAX_ITEMS);
@@ -57,6 +57,7 @@ export const UpsertTaskInputSchema = z
     title: ShortString,
     objective: BoundedString,
     state: z.enum(["open", "in_progress", "blocked", "ready_for_review", "complete", "cancelled"]),
+    expectedUpdatedAt: z.string().trim().min(1).max(64).optional(),
     constraints: BoundedList.default([]),
     nextActions: BoundedList.default([]),
     provenance: AgentSchema.optional(),
@@ -168,6 +169,13 @@ function now(): string {
   return new Date().toISOString();
 }
 
+function nextTimestamp(previous?: string): string {
+  const current = Date.now();
+  const previousTime = previous ? Date.parse(previous) : Number.NaN;
+  const timestamp = Number.isFinite(previousTime) ? Math.max(current, previousTime + 1) : current;
+  return new Date(timestamp).toISOString();
+}
+
 function ensureBoundedJson(value: unknown): string {
   const text = JSON.stringify(value);
   if (Buffer.byteLength(text, "utf8") > MAX_RECORD_BYTES) {
@@ -177,7 +185,7 @@ function ensureBoundedJson(value: unknown): string {
 }
 
 function safeId(value: string, label: string): string {
-  if (!SAFE_ID.test(value)) throw continuityError("INVALID_ID", `${label} must be a safe identifier`);
+  if (!SAFE_ID_REGEX.test(value)) throw continuityError("INVALID_ID", `${label} ${SAFE_ID_MESSAGE}`);
   return value;
 }
 
@@ -192,15 +200,23 @@ function isWithin(root: string, candidate: string): boolean {
 
 function defaultStateDir(configPath: string, projects: ResolvedProject[]): string {
   const configDir = path.dirname(configPath);
-  const preferred = path.join(configDir, "state");
-  if (!projects.some((project) => isWithin(project.canonicalPath, preferred))) return preferred;
+  const filesystemRoot = path.parse(path.resolve(configDir)).root;
+  const candidates = [
+    configDir === filesystemRoot ? undefined : path.join(configDir, "state"),
+    process.env.XDG_STATE_HOME ? path.join(process.env.XDG_STATE_HOME, "context-bridge") : undefined,
+    path.join(os.homedir(), ".local", "state", "context-bridge"),
+    path.join(os.homedir(), ".context-bridge-state"),
+    path.join(os.tmpdir(), "context-bridge-state"),
+  ];
+  const candidate = candidates
+    .filter((value): value is string => Boolean(value))
+    .map((value) => path.resolve(value))
+    .find((value) => path.dirname(value) !== filesystemRoot && !projects.some((project) => isWithin(project.canonicalPath, value)));
 
-  // A config committed inside a repository must not cause state to be committed there.
-  const sibling = path.join(path.dirname(configDir), ".context-bridge-state");
-  if (!projects.some((project) => isWithin(project.canonicalPath, sibling))) return sibling;
-
-  // Last portable fallback for unusual roots such as a project rooted at $HOME.
-  return path.join(os.tmpdir(), "context-bridge-state");
+  if (!candidate) {
+    throw continuityError("INVALID_STATE_DIR", "could not derive a state directory outside all configured project roots; set CONTEXT_BRIDGE_STATE_DIR explicitly");
+  }
+  return candidate;
 }
 
 export function resolveStateDir(configPath: string, projects: ResolvedProject[], explicit = process.env.CONTEXT_BRIDGE_STATE_DIR): string {
@@ -342,30 +358,71 @@ export class ContinuityStore {
     return path.join(this.handoffsDir, `${keyFor("handoff", project, handoffId)}.json`);
   }
 
+  private async withRecordLock<T>(key: string, operation: () => Promise<T>): Promise<T> {
+    const lockKey = `${this.stateDir}\0${key}`;
+    const previous = recordLocks.get(lockKey);
+    let release!: () => void;
+    const current = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    recordLocks.set(lockKey, current);
+    if (previous) await previous;
+    try {
+      return await operation();
+    } finally {
+      release();
+      if (recordLocks.get(lockKey) === current) recordLocks.delete(lockKey);
+    }
+  }
+
   async upsertTask(input: UpsertTaskRequest): Promise<StoredTask> {
     const project = this.project(input.project);
     await this.ensureStorage();
     const filePath = this.taskPath(input.project, input.taskId);
-    const existing = (await readJson(filePath)) as StoredTask | null;
-    if (!existing && (await listJsonFiles(this.tasksDir)).length >= MAX_STORED_RECORDS) {
-      throw continuityError("BOUNDED", `maximum of ${MAX_STORED_RECORDS} stored tasks reached`);
-    }
-    const timestamp = now();
-    const task: StoredTask = {
-      kind: "task",
-      project: { name: project.name, canonicalPath: project.canonicalPath },
-      taskId: input.taskId,
-      title: input.title,
-      objective: input.objective,
-      state: input.state,
-      constraints: input.constraints ?? [],
-      nextActions: input.nextActions ?? [],
-      createdAt: existing?.createdAt ?? timestamp,
-      updatedAt: timestamp,
-      provenance: input.provenance ?? existing?.provenance ?? {},
-    };
-    await atomicWrite(filePath, task);
-    return task;
+    return this.withRecordLock(`task\0${input.project}\0${input.taskId}`, async () => {
+      const existing = (await readJson(filePath)) as StoredTask | null;
+      if (existing) {
+        if (!input.expectedUpdatedAt) {
+          throw continuityError(
+            "CONFLICT",
+            `task already exists; expectedUpdatedAt is required to update ${input.taskId}`,
+            { kind: "task", project: input.project, taskId: input.taskId, expectedUpdatedAt: null, actualUpdatedAt: existing.updatedAt },
+          );
+        }
+        if (input.expectedUpdatedAt !== existing.updatedAt) {
+          throw continuityError(
+            "CONFLICT",
+            `task is stale; expectedUpdatedAt does not match ${input.taskId}`,
+            { kind: "task", project: input.project, taskId: input.taskId, expectedUpdatedAt: input.expectedUpdatedAt, actualUpdatedAt: existing.updatedAt },
+          );
+        }
+      } else if (input.expectedUpdatedAt) {
+        throw continuityError(
+          "CONFLICT",
+          `task does not exist; remove expectedUpdatedAt to create ${input.taskId}`,
+          { kind: "task", project: input.project, taskId: input.taskId, expectedUpdatedAt: input.expectedUpdatedAt, actualUpdatedAt: null },
+        );
+      }
+      if (!existing && (await listJsonFiles(this.tasksDir)).length >= MAX_STORED_RECORDS) {
+        throw continuityError("BOUNDED", `maximum of ${MAX_STORED_RECORDS} stored tasks reached`);
+      }
+      const timestamp = nextTimestamp(existing?.updatedAt);
+      const task: StoredTask = {
+        kind: "task",
+        project: { name: project.name, canonicalPath: project.canonicalPath },
+        taskId: input.taskId,
+        title: input.title,
+        objective: input.objective,
+        state: input.state,
+        constraints: input.constraints ?? [],
+        nextActions: input.nextActions ?? [],
+        createdAt: existing?.createdAt ?? timestamp,
+        updatedAt: timestamp,
+        provenance: input.provenance ?? existing?.provenance ?? {},
+      };
+      await atomicWrite(filePath, task);
+      return task;
+    });
   }
 
   async listTasks(input: z.infer<typeof ListTasksInputSchema>) {
@@ -402,33 +459,43 @@ export class ContinuityStore {
     const handoffId = input.handoffId ?? `h-${Date.now().toString(36)}-${crypto.randomBytes(5).toString("hex")}`;
     safeId(handoffId, "handoffId");
     const handoffPath = this.handoffPath(input.project, handoffId);
-    if (!(await readJson(handoffPath)) && (await listJsonFiles(this.handoffsDir)).length >= MAX_STORED_RECORDS) {
-      throw continuityError("BOUNDED", `maximum of ${MAX_STORED_RECORDS} stored handoffs reached`);
-    }
-    const canonical = await this.observe(project, input.worktreePath);
-    const assertion = input.assertedRepositoryState;
-    const timestamp = now();
-    const handoff: StoredHandoff = {
-      kind: "handoff",
-      handoffId,
-      project: { name: project.name, canonicalPath: project.canonicalPath },
-      taskId: input.taskId,
-      agent: input.agent ?? {},
-      status: input.status,
-      summary: input.summary,
-      findings: input.findings ?? [],
-      validation: input.validation ?? [],
-      decisions: input.decisions ?? [],
-      blockers: input.blockers ?? [],
-      nextActions: input.nextActions ?? [],
-      relevantFiles: input.relevantFiles ?? [],
-      commits: input.commits ?? [],
-      repositoryState: { canonical, assertion, mismatches: mismatchFor(assertion, canonical) },
-      createdAt: timestamp,
-      updatedAt: timestamp,
-    };
-    await atomicWrite(handoffPath, handoff);
-    return handoff;
+    return this.withRecordLock(`handoff\0${input.project}\0${handoffId}`, async () => {
+      const existing = await readJson(handoffPath);
+      if (existing) {
+        throw continuityError(
+          "CONFLICT",
+          `handoffId already exists: ${handoffId}`,
+          { kind: "handoff", project: input.project, handoffId, reason: "duplicate_handoff_id" },
+        );
+      }
+      if ((await listJsonFiles(this.handoffsDir)).length >= MAX_STORED_RECORDS) {
+        throw continuityError("BOUNDED", `maximum of ${MAX_STORED_RECORDS} stored handoffs reached`);
+      }
+      const canonical = await this.observe(project, input.worktreePath);
+      const assertion = input.assertedRepositoryState;
+      const timestamp = now();
+      const handoff: StoredHandoff = {
+        kind: "handoff",
+        handoffId,
+        project: { name: project.name, canonicalPath: project.canonicalPath },
+        taskId: input.taskId,
+        agent: input.agent ?? {},
+        status: input.status,
+        summary: input.summary,
+        findings: input.findings ?? [],
+        validation: input.validation ?? [],
+        decisions: input.decisions ?? [],
+        blockers: input.blockers ?? [],
+        nextActions: input.nextActions ?? [],
+        relevantFiles: input.relevantFiles ?? [],
+        commits: input.commits ?? [],
+        repositoryState: { canonical, assertion, mismatches: mismatchFor(assertion, canonical) },
+        createdAt: timestamp,
+        updatedAt: timestamp,
+      };
+      await atomicWrite(handoffPath, handoff);
+      return handoff;
+    });
   }
 
   async listHandoffs(input: z.infer<typeof ListHandoffsInputSchema>) {

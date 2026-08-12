@@ -122,7 +122,7 @@ Most clients accept an `mcp.json` like:
 }
 ```
 
-When installed as an Agent Plugin, `mcp.json` is discovered at the plugin root and launches `node ./dist/mcp/server.js` with `cwd: ${PLUGIN_ROOT}`. This avoids relying on executable mode bits and keeps command/argument behavior portable across MCP hosts. Set `CONTEXT_BRIDGE_STATE_DIR` if you need to choose the state location explicitly; otherwise the server derives a restrictive state directory from the config location and keeps it outside configured project roots.
+When installed as an Agent Plugin, `mcp.json` is discovered at the plugin root and launches `node` with `./dist/mcp/server.js` as an argument and `cwd: ${PLUGIN_ROOT}`. This avoids relying on executable mode bits and keeps command/argument behavior portable across MCP hosts. Set `CONTEXT_BRIDGE_STATE_DIR` if you need to choose the state location explicitly; otherwise the server chooses an unprivileged XDG/home/temp location outside configured project roots.
 
 The same standard STDIO configuration can be used by Claude Code, Cursor, Codex, or another MCP host, including hosts that import an existing MCP entry. The core server has no host-specific behavior, authentication, headers, or network dependency. It emits MCP protocol data on stdout only; startup diagnostics and fatal errors go to stderr. Hosts should set an explicit config path and, when using relative `args`, a predictable `cwd`.
 
@@ -187,6 +187,10 @@ sessionArtifacts:
     - reports/**/*.md
     - sessions/**/*.json
 ```
+
+Configured project names are portable safe identifiers: 1–128 letters, numbers, `.`, `_`, or `-`, beginning with a letter or number (for example, `my-project`). Spaces and other punctuation are rejected when the config is parsed because the same name is used by continuity tools.
+
+Task creation is simple: omit `expectedUpdatedAt` for a new task. To update an existing task, pass the `updatedAt` returned by `context.task_get` or the previous `context.task_upsert` response as `expectedUpdatedAt`; stale or missing versions return a structured `CONFLICT` and preserve the record. Explicit duplicate `handoffId` values likewise return `CONFLICT` and never overwrite the first record. These write controls serialize records within one stdio server process. Cross-process coordination remains a documented P2.
 
 Only allowlisted `projects[].path` are ever inspected. Only `context` globs are readable as documents. Everything else is denied.
 

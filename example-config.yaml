@@ -8,6 +8,8 @@
 version: 1
 
 projects:
+  # Names must be 1-128 chars, start with a letter/number, and use only
+  # letters, numbers, ., _, or -; the same identifier is used by MCP tools.
   - name: my-project
     path: /Users/me/dev/my-project
     context:

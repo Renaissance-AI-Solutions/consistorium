@@ -25,12 +25,23 @@ afterEach(async () => {
 });
 
 describe("durable continuity", () => {
-  it("derives default state outside a configured repository when config is colocated", async () => {
+  it("derives default state outside a configured repository when config is at the project root", async () => {
     const repo = await createGitRepo();
     disposables.push(repo);
     const config = configFor(repo, repo);
     const store = new ContinuityStore({ ...config, configPath: path.join(repo, "context-bridge.yaml") });
     expect(store.stateDir === repo || store.stateDir.startsWith(`${repo}${path.sep}`)).toBe(false);
+    expect(path.parse(store.stateDir).root).not.toBe(store.stateDir);
+  });
+
+  it("uses an unprivileged portable location for a filesystem-root config path", async () => {
+    const repo = await createGitRepo();
+    disposables.push(repo);
+    const config = configFor(repo, repo);
+    const filesystemRoot = path.parse(repo).root;
+    const store = new ContinuityStore({ ...config, configPath: path.join(filesystemRoot, "context-bridge.yaml") });
+    expect(store.stateDir === repo || store.stateDir.startsWith(`${repo}${path.sep}`)).toBe(false);
+    expect(store.stateDir).not.toBe(filesystemRoot);
   });
 
   it("persists bounded tasks atomically and keeps lists compact", async () => {
@@ -84,6 +95,67 @@ describe("durable continuity", () => {
       status: "blocked",
       summary: "x".repeat(4001),
     })).toThrow();
+  });
+
+  it("rejects stale task updates and accepts a matching expected version", async () => {
+    const repo = await createGitRepo();
+    const stateDir = await mkdtemp("cb-state-");
+    disposables.push(repo, stateDir);
+    const store = new ContinuityStore(configFor(repo, stateDir), { stateDir });
+    const created = await store.upsertTask({
+      project: "proj",
+      taskId: "versioned-task",
+      title: "Initial",
+      objective: "Keep the versioned task safe",
+      state: "open",
+    });
+
+    await expect(store.upsertTask({
+      project: "proj",
+      taskId: "versioned-task",
+      title: "Stale overwrite",
+      objective: "Must not replace the current record",
+      state: "blocked",
+      expectedUpdatedAt: "2000-01-01T00:00:00.000Z",
+    })).rejects.toMatchObject({ code: "CONFLICT" });
+
+    const updated = await store.upsertTask({
+      project: "proj",
+      taskId: "versioned-task",
+      title: "Current update",
+      objective: "Use the version returned by the prior read",
+      state: "in_progress",
+      expectedUpdatedAt: created.updatedAt,
+    });
+    expect(updated.title).toBe("Current update");
+    expect(updated.updatedAt).not.toBe(created.updatedAt);
+  });
+
+  it("serializes duplicate handoff creation and preserves the winning record", async () => {
+    const repo = await createGitRepo();
+    const stateDir = await mkdtemp("cb-state-");
+    disposables.push(repo, stateDir);
+    const store = new ContinuityStore(configFor(repo, stateDir), { stateDir });
+    const otherStore = new ContinuityStore(configFor(repo, stateDir), { stateDir });
+    const makeInput = (summary: string) => ({
+      project: "proj" as const,
+      taskId: "versioned-task" as const,
+      handoffId: "duplicate-handoff" as const,
+      status: "ready_for_review" as const,
+      summary,
+    });
+
+    const results = await Promise.allSettled([
+      store.createHandoff(makeInput("first writer")),
+      otherStore.createHandoff(makeInput("second writer")),
+    ]);
+    const successes = results.filter((result): result is PromiseFulfilledResult<Awaited<ReturnType<typeof store.createHandoff>>> => result.status === "fulfilled");
+    const conflicts = results.filter((result) => result.status === "rejected" && (result.reason as { code?: string }).code === "CONFLICT");
+    expect(successes).toHaveLength(1);
+    expect(conflicts).toHaveLength(1);
+
+    const stored = await store.getHandoff({ project: "proj", handoffId: "duplicate-handoff" });
+    expect(stored.summary).toBe(successes[0]!.value.summary);
   });
 
   it("captures canonical Git state and explicit mismatches, then refreshes staleness", async () => {

@@ -37,6 +37,11 @@ projects:
     expect(() => parseConfigContent(y, "config.yaml")).toThrow();
   });
 
+  it("rejects project names with spaces using the continuity safe identifier contract", () => {
+    const y = `projects:\n  - name: "project with spaces"\n    path: /tmp/x\n`;
+    expect(() => parseConfigContent(y, "config.yaml")).toThrow(/safe identifier/);
+  });
+
   it("rejects duplicate project names on resolve", () => {
     const raw = {
       version: 1,

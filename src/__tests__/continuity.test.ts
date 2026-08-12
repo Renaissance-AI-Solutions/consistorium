@@ -44,6 +44,18 @@ describe("durable continuity", () => {
     expect(store.stateDir).not.toBe(filesystemRoot);
   });
 
+  it("keeps an existing legacy sibling state directory visible after upgrade", async () => {
+    const container = await mkdtemp("cb-upgrade-");
+    const repo = path.join(container, "project");
+    const legacyState = path.join(container, ".context-bridge-state");
+    disposables.push(container);
+    await fs.promises.mkdir(repo);
+    await fs.promises.mkdir(legacyState);
+    const config = configFor(repo, repo);
+    const store = new ContinuityStore({ ...config, configPath: path.join(repo, "context-bridge.yaml") });
+    expect(store.stateDir).toBe(legacyState);
+  });
+
   it("persists bounded tasks atomically and keeps lists compact", async () => {
     const repo = await createGitRepo();
     const stateDir = await mkdtemp("cb-state-");

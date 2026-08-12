@@ -126,6 +126,8 @@ When installed as an Agent Plugin, `mcp.json` is discovered at the plugin root a
 
 The same standard STDIO configuration can be used by Claude Code, Cursor, Codex, or another MCP host, including hosts that import an existing MCP entry. The core server has no host-specific behavior, authentication, headers, or network dependency. It emits MCP protocol data on stdout only; startup diagnostics and fatal errors go to stderr. Hosts should set an explicit config path and, when using relative `args`, a predictable `cwd`.
 
+For upgrades, an existing legacy `.context-bridge-state` directory beside a project-root config remains discoverable. New project-root or filesystem-root configurations use the unprivileged XDG/home state location instead of creating state at the filesystem root.
+
 ### Connect Hermes
 
 After building, add the stdio server to Hermes with portable paths. The exact flag values below are ordinary Hermes CLI options; replace the placeholders for your machine:

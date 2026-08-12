@@ -57,7 +57,7 @@ export const TOOL_DEFS: ToolDef[] = [
         title: { type: "string", minLength: 1, maxLength: 500 },
         objective: { type: "string", minLength: 1, maxLength: 4000 },
         state: { type: "string", enum: ["open", "in_progress", "blocked", "ready_for_review", "complete", "cancelled"] },
-        expectedUpdatedAt: { type: "string", maxLength: 64, description: "Required when updating an existing task; use the updatedAt returned by task_get or task_upsert." },
+        expectedUpdatedAt: { type: "string", minLength: 1, maxLength: 64, description: "Required when updating an existing task; use the updatedAt returned by task_get or task_upsert." },
         constraints: { type: "array", maxItems: 50, items: { type: "string", minLength: 1, maxLength: 4000 } },
         nextActions: { type: "array", maxItems: 50, items: { type: "string", minLength: 1, maxLength: 4000 } },
         provenance: {

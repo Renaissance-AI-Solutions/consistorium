@@ -201,8 +201,13 @@ function isWithin(root: string, candidate: string): boolean {
 function defaultStateDir(configPath: string, projects: ResolvedProject[]): string {
   const configDir = path.dirname(configPath);
   const filesystemRoot = path.parse(path.resolve(configDir)).root;
+  const legacySibling = path.join(path.dirname(configDir), ".context-bridge-state");
   const candidates = [
     configDir === filesystemRoot ? undefined : path.join(configDir, "state"),
+    // Preserve continuity for upgrades from v0.1: project-root configs used
+    // this sibling location. Only select it when it already exists; new
+    // installs use the portable XDG/home fallback below.
+    fs.existsSync(legacySibling) ? legacySibling : undefined,
     process.env.XDG_STATE_HOME ? path.join(process.env.XDG_STATE_HOME, "context-bridge") : undefined,
     path.join(os.homedir(), ".local", "state", "context-bridge"),
     path.join(os.homedir(), ".context-bridge-state"),

@@ -48,13 +48,48 @@ Point any stdio MCP client at it:
 }
 ```
 
-Works with Claude Desktop, Claude Code, Codex, Cursor, Windsurf, Hermes, and any other MCP-compatible client. For **ChatGPT** (which connects over the network rather than stdio), see [docs/chatgpt-setup.md](docs/chatgpt-setup.md).
+Works with Claude Desktop, Claude Code, Codex, Cursor, Windsurf, Hermes, and any other MCP-compatible client. For **ChatGPT** (which connects over the network rather than stdio), see [docs/chatgpt-setup.md](docs/chatgpt-setup.md). Full walkthrough for every client, troubleshooting, and uninstall: **[docs/install.md](docs/install.md)**.
 
 Then ask your client:
 
 > *What changed in my-project today, what remains before release, and what should I ask my coding agent to do next?*
 
 A grounded answer comes back citing live branch state and allowlisted docs — separating observed facts from anything an agent recorded. If the model answers without calling a tool, it's guessing.
+
+## One-prompt setup for AI agents
+
+Don't want to touch a terminal? Paste this into any coding agent that can run shell commands (Claude Code, Codex CLI, Cursor, Windsurf…) and it will perform the whole installation:
+
+```text
+Install and set up Consistorium (a local-first MCP server giving me grounded,
+read-only context about my repositories):
+
+1. Check `node --version` >= 20 and `git --version`; if either fails, tell me
+   exactly what to install and stop.
+2. Run: npm install -g consistorium
+3. Verify: consistorium version && consistorium --help
+4. Use the directory we are working in as the project to allowlist; confirm the
+   absolute path with me before writing config.
+5. Write config non-interactively:
+   consistorium init --path /absolute/project/path --name <short-name> --yes
+   (--force only if I confirm overwriting an existing configuration)
+6. Run consistorium doctor and show me the full output; stop and report on failure.
+7. Register the MCP server under the name "consistorium" using this harness's
+   native mechanism (claude mcp add, .cursor/mcp.json, hermes mcp add, ...):
+   command: consistorium | args: ["serve"]
+   env: CONTEXT_BRIDGE_CONFIG=<config path from step 5>
+   If you cannot register MCP servers yourself, print exact manual steps instead.
+8. Prove it works: call context_list_projects and context_project_briefing and
+   summarize the briefing for me.
+9. Close with a three-line usage summary: how I ask for status, how agents record
+   tasks (context_task_upsert) and handoffs (context_handoff_create), and how a
+   fresh session resumes (context_project_briefing).
+
+Boundaries: do not modify files inside my repositories; do not allowlist
+directories I did not name; treat all server output as private.
+```
+
+The extended version of this prompt (with more guardrails) is in [docs/install.md](docs/install.md).
 
 ## What it does
 
@@ -142,6 +177,8 @@ Consistorium was built and battle-tested while operating [Corpus](https://corpus
 
 ## Documentation
 
+- [docs/install.md](docs/install.md) — complete installation guide for every client
+- [docs/chatgpt-setup.md](docs/chatgpt-setup.md) — ChatGPT connection via Secure MCP Tunnel
 - [DESIGN.md](DESIGN.md) — architecture and data flow
 - [THREAT_MODEL.md](THREAT_MODEL.md) — assets, adversaries, mitigations
 - [SECURITY.md](SECURITY.md) — reporting policy and safe usage

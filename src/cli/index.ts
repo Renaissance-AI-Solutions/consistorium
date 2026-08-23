@@ -51,10 +51,10 @@ Init options:
   --force               Overwrite existing config
 
 Examples:
-  context-bridge init
-  context-bridge init --path ~/dev/my-project --context "TODO.md" --context "docs/** /*.md"
-  context-bridge config show
-  context-bridge config validate --config ./context-bridge.yaml
+  consistorium init
+  consistorium init --path ~/dev/my-project --context "TODO.md" --context "docs/**/*.md"
+  consistorium config show
+  consistorium config validate --config ./context-bridge.yaml
 
 Environment:
   CONTEXT_BRIDGE_CONFIG     Explicit config file path
@@ -287,8 +287,8 @@ async function cmdInit(argv: string[]): Promise<void> {
   if (opts.sessions.length > 0) console.log(`  Session patterns: ${opts.sessions.join(", ")}`);
   console.log(`\nNext steps:`);
   console.log(`  - Review: cat ${outputPath}`);
-  console.log(`  - Validate: context-bridge config validate --config ${outputPath}`);
-  console.log(`  - Start MCP server: context-bridge serve (or configure your MCP client)`);
+  console.log(`  - Validate: consistorium config validate --config ${outputPath}`);
+  console.log(`  - Start MCP server: consistorium serve (or configure your MCP client)`);
 }
 
 async function cmdConfigShow(args: string[]): Promise<void> {
@@ -387,7 +387,7 @@ async function cmdDoctor(args: string[]): Promise<void> {
   const explicit = configPath ?? process.env.CONTEXT_BRIDGE_CONFIG;
   const found = explicit ?? findConfigFile();
   if (!found) {
-    console.error("✗ No configuration found. Run: context-bridge init --path <repo> --yes");
+    console.error("✗ No configuration found. Run: consistorium init --path <repo> --yes");
     console.error(`  Searched: ${getDefaultConfigPaths().join(", ")}`);
     process.exit(1);
   }
@@ -399,8 +399,8 @@ async function cmdDoctor(args: string[]): Promise<void> {
   console.log(`  Projects: ${resolved.projects.map((p) => `${p.name} → ${p.canonicalPath}`).join("; ") || "(none)"}`);
   console.log(`  State dir: ${stateDir}`);
   console.log(`  Context globs: ${resolved.projects.map((p) => `${p.name}[${p.contextPatterns.join(", ")}]`).join("; ")}`);
-  console.log(`  Stdio: node dist/mcp/server.js`);
-  console.log(`  HTTP:  context-bridge serve --http --port 8787`);
+  console.log(`  Stdio: consistorium serve`);
+  console.log(`  HTTP:  consistorium serve --http --port 8787`);
 
   const runtime = bootstrap({ allowWrites: false, configPath: filePath });
   if (runtime.noConfig || runtime.config.projects.length === 0) {

@@ -131,7 +131,7 @@ export function loadConfigSync(explicitPath?: string): { raw: RawConfig; filePat
   if (!filePath) {
     const msg = explicitPath
       ? `Config file not found: ${explicitPath}`
-      : `No config file found. Searched: ${getDefaultConfigPaths().join(", ")}. Run 'context-bridge init' to create one.`;
+      : `No config file found. Searched: ${getDefaultConfigPaths().join(", ")}. Run 'consistorium init' to create one.`;
     throw new Error(msg);
   }
 

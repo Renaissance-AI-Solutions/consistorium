@@ -50,7 +50,7 @@
   },
   "homepage": "https://github.com/Renaissance-AI-Solutions/consistorium",
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=20.0.0"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.12.0",

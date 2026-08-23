@@ -20,6 +20,8 @@ Consistorium closes the gap in the other direction: instead of dragging your str
 
 ## 30-second quickstart
 
+> Requires Node.js 20+ and `git` on `PATH`.
+
 ```bash
 npm install -g consistorium
 

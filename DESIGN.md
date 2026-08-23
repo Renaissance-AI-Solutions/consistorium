@@ -1,8 +1,8 @@
-# Design — Context Bridge
+# Design — Consistorium
 
 ## 1. Purpose
 
-Context Bridge is a **vendor-neutral, local-first continuity/state layer** for AI agents. Repository inspection remains read-only; narrow structured task/handoff records are durably stored outside inspected repositories.
+Consistorium (formerly built under the working name Context Bridge) is a **vendor-neutral, local-first continuity/state layer** for AI agents. Repository inspection remains read-only; narrow structured task/handoff records are durably stored outside inspected repositories.
 
 It answers *"What is actually happening, and where did the previous agent leave the task?"* without becoming an agent launcher, orchestrator, or execution service.
 

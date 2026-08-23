@@ -13,8 +13,6 @@
 
 Use GitHub's [private vulnerability reporting](https://docs.github.com/en/code-security/security-advisories/guidance-on-reporting-and-writing-information-about-vulnerabilities/privately-reporting-a-security-vulnerability) on this repository. That is the preferred channel and needs no public disclosure.
 
-<!-- TODO(release): add a security contact address here, or delete this line if GitHub advisories are the only channel. -->
-
 Please include:
 
 - A description of the vulnerability and its impact

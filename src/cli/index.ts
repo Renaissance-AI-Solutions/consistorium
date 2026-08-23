@@ -17,10 +17,10 @@ const VERSION = "0.3.0";
 
 function printHelp(): void {
   console.log(`
-Context Bridge v${VERSION} — vendor-neutral task/handoff continuity + bounded repository observation
+Consistorium v${VERSION} — vendor-neutral task/handoff continuity + bounded repository observation
 
 Usage:
-  context-bridge <command> [options]
+  consistorium <command> [options]
 
 Commands:
   init                  Initialize a new configuration interactively or with flags
@@ -171,7 +171,7 @@ async function cmdInit(argv: string[]): Promise<void> {
     });
   } else {
     // Interactive mode
-    console.log("Context Bridge — initialization\n");
+    console.log("Consistorium — initialization\n");
     console.log("You will explicitly allowlist project roots. Only these directories will be inspected.\n");
 
     let addMore = true;

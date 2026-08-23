@@ -1,16 +1,16 @@
 ---
 name: project-state
-description: Establish live development reality and handoff continuity via Context Bridge before giving advice or continuing a task.
+description: Establish live development reality and handoff continuity via Consistorium before giving advice or continuing a task.
 version: 0.3.0
 ---
 
 # Project State — Establish Reality Before Advice
 
-This skill teaches an AI how to use **Context Bridge** to ground its answers in observed local development state rather than assumptions.
+This skill teaches an AI how to use **Consistorium** to ground its answers in observed local development state rather than assumptions.
 
 ## When to use
 
-Use this skill whenever the user asks for strategic, architectural, or prioritization advice about their codebase, or when a fresh agent is continuing a task through Context Bridge MCP tools.
+Use this skill whenever the user asks for strategic, architectural, or prioritization advice about their codebase, or when a fresh agent is continuing a task through Consistorium MCP tools.
 
 Examples:
 - "What should I work on next?"
@@ -117,7 +117,7 @@ If you need to know what diverges between branches:
 5. **Prefer structured summaries before raw detail.** Do not dump enormous diffs into context. Use `diffStat` and `changedFiles` first.
 6. **Do not assume `main` is the source of truth.** Parallel worktrees may hold the most important unmerged work.
 7. **Honor allowlisting.** If a document or path is not available, explain that it is outside the configured/accessible scope rather than attempting filesystem bypasses.
-8. **Do not request or repeat secrets.** Context Bridge redacts and denies secret files. Never try to widen access to `.env`, keys, or credential files.
+8. **Do not request or repeat secrets.** Consistorium redacts and denies secret files. Never try to widen access to `.env`, keys, or credential files.
 
 ## Example (condensed)
 
@@ -135,7 +135,7 @@ If you need to know what diverges between branches:
 - Not an orchestrator — it does not launch agents, execute commands, mutate branches, or create worktrees.
 - Not a generic task manager — it records structured continuation state; agents still perform and verify work themselves.
 - Not a publish step — do not auto-publish session artifacts or code.
-- Not a replacement for `git` CLI when the user explicitly wants to run git themselves; Context Bridge is read-only.
+- Not a replacement for `git` CLI when the user explicitly wants to run git themselves; Consistorium is read-only.
 
 ## Future concept (not implemented)
 

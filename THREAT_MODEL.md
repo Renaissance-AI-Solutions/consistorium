@@ -1,15 +1,15 @@
-# Threat Model — Context Bridge
+# Threat Model — Consistorium
 
 ## 1. System boundary
 
-Context Bridge sits between **an AI agent (MCP client)** and **the developer's local filesystem / git repositories**, with a separate local continuity state directory.
+Consistorium sits between **an AI agent (MCP client)** and **the developer's local filesystem / git repositories**, with a separate local continuity state directory.
 
 - The agent is **untrusted** with respect to the filesystem: it may be prompted adversarially or hallucinate paths.
 - The filesystem is **trusted** but contains sensitive data (secrets, keys, private repos).
 - The plugin process is **local, user-owned**. Streamable HTTP is an optional loopback listener for ChatGPT Developer mode / Secure MCP Tunnel, not a public service.
 
 ```
-[ AI (untrusted prompt influence) ] --MCP--> [ Context Bridge ] --read-only allowlisted git/fs--> [ Projects ]
+[ AI (untrusted prompt influence) ] --MCP--> [ Consistorium ] --read-only allowlisted git/fs--> [ Projects ]
                                               └── bounded structured writes ──> [ State outside projects ]
 ```
 

@@ -41,7 +41,7 @@ describe("MCP tool defs", () => {
     const manifest = JSON.parse(
       await fs.promises.readFile(path.resolve("mcp.json"), "utf8")
     ) as { mcpServers: Record<string, { type: string; command: string; args: string[]; cwd: string }> };
-    const entry = manifest.mcpServers["context-bridge"];
+    const entry = manifest.mcpServers["consistorium"];
     expect(entry).toEqual({
       type: "stdio",
       command: "node",

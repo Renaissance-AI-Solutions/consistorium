@@ -1,4 +1,4 @@
-# Context Bridge example configuration
+# Consistorium example configuration
 # Copy to ~/.config/context-bridge/config.yaml or set CONTEXT_BRIDGE_CONFIG
 # Only allowlisted projects are inspected — nothing else is accessible.
 # Structured tasks/handoffs are stored outside these roots by default. Set

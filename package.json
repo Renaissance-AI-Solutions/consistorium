@@ -1,10 +1,10 @@
 {
-  "name": "context-bridge",
+  "name": "consistorium",
   "version": "0.3.0",
   "description": "Local-first strategic context and agent continuity layer via MCP (stdio + Streamable HTTP)",
   "type": "module",
   "bin": {
-    "context-bridge": "./dist/cli/index.js"
+    "consistorium": "./dist/cli/index.js"
   },
   "files": [
     "dist",
@@ -29,20 +29,26 @@
   },
   "keywords": [
     "mcp",
+    "model-context-protocol",
     "agent-plugins",
     "development-intelligence",
     "git",
-    "worktree"
+    "worktree",
+    "ai-agents",
+    "chatgpt",
+    "repo-context",
+    "agent-handoff"
   ],
   "author": {
-    "name": "Context Bridge Contributors"
+    "name": "Renaissance AI",
+    "url": "https://corpuslaw.us"
   },
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/context-bridge/context-bridge"
+    "url": "https://github.com/Renaissance-AI-Solutions/consistorium"
   },
-  "homepage": "https://github.com/context-bridge/context-bridge",
+  "homepage": "https://github.com/Renaissance-AI-Solutions/consistorium",
   "engines": {
     "node": ">=18.0.0"
   },

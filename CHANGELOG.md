@@ -1,6 +1,6 @@
 # Changelog
 
-All notable changes to Consistorium (the Context Bridge MCP server) are recorded here.
+All notable changes to Consistorium are recorded here.
 
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
@@ -8,6 +8,14 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 ## [0.3.0] — 2026-08-19
 
 First release intended for public use. The tool rename below is breaking.
+
+### Changed — naming
+
+- **The project is named Consistorium.** The published npm package is `consistorium`, the CLI
+  entrypoint is `consistorium`, and the MCP `serverInfo.name` is `consistorium`. Internal
+  identifiers keep their historical names for compatibility: the `context_*` tool prefix, the
+  `CONTEXT_BRIDGE_*` environment variables, and the `~/.config/context-bridge/` configuration
+  directory are unchanged in 0.3.x.
 
 ### Changed — breaking
 

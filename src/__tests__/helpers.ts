@@ -20,7 +20,7 @@ export async function createGitRepo(dir?: string): Promise<string> {
   await fs.promises.mkdir(cwd, { recursive: true });
   await git(cwd, ["init", "-b", "main"]);
   await git(cwd, ["config", "user.email", "test@context-bridge.local"]);
-  await git(cwd, ["config", "user.name", "Context Bridge Test"]);
+  await git(cwd, ["config", "user.name", "Consistorium Test"]);
   return cwd;
 }
 

@@ -1,5 +1,5 @@
 /**
- * Normalized data models for Context Bridge.
+ * Normalized data models for Consistorium.
  * All timestamps are ISO 8601 strings.
  * All counts/sizes are bounded.
  */

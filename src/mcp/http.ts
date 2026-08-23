@@ -1,5 +1,5 @@
 /**
- * Streamable HTTP transport for Context Bridge.
+ * Streamable HTTP transport for Consistorium.
  *
  * Default posture for a private single-founder deployment:
  * - bind 127.0.0.1
@@ -131,13 +131,13 @@ export async function startHttpServer(opts: HttpListenOptions = {}): Promise<Sta
     }
 
     if (req.method === "GET" && url.pathname === "/healthz") {
-      sendJson(res, 200, { ok: true, name: "context-bridge", transport: "streamable-http" });
+      sendJson(res, 200, { ok: true, name: "consistorium", transport: "streamable-http" });
       return;
     }
 
     if (req.method === "GET" && url.pathname === "/") {
       sendJson(res, 200, {
-        name: "context-bridge",
+        name: "consistorium",
         transport: "streamable-http",
         mcp: "/mcp",
         health: "/healthz",
@@ -157,7 +157,7 @@ export async function startHttpServer(opts: HttpListenOptions = {}): Promise<Sta
           res,
           401,
           { error: "missing or invalid bearer token", code: "UNAUTHORIZED" },
-          { "WWW-Authenticate": 'Bearer realm="context-bridge"' }
+          { "WWW-Authenticate": 'Bearer realm="consistorium"' }
         );
         return;
       }

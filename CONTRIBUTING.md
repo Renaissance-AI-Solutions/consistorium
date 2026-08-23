@@ -13,8 +13,8 @@ Thanks for helping build a local-first continuity and bounded observation layer 
 ## Development setup
 
 ```bash
-git clone https://github.com/context-bridge/context-bridge
-cd context-bridge
+git clone https://github.com/Renaissance-AI-Solutions/consistorium
+cd consistorium
 npm install --cache /tmp/npm-cache  # or plain npm install
 npm run build
 npm run typecheck
@@ -22,10 +22,10 @@ npm test
 npm run lint
 ```
 
-For a local Hermes connection after `npm run build`, use the portable form documented in `README.md`:
+After `npm run build`, connect any MCP client using the portable form documented in `README.md`:
 
 ```bash
-hermes mcp add context-bridge \
+hermes mcp add consistorium \
   --command node \
   --args /portable/path/context-bridge/dist/mcp/server.js \
   --env CONTEXT_BRIDGE_CONFIG=/portable/path/context-bridge-config.yaml \

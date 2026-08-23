@@ -27,7 +27,7 @@ import { buildProjectBriefing } from "../core/briefing.js";
 import { MCP_SERVER_INSTRUCTIONS, TOOL_DEFS, WRITE_TOOLS, canonicalToolName, type ToolDef } from "./tools.js";
 import type { ResolvedConfig } from "../core/types.js";
 
-export const SERVER_NAME = "context-bridge";
+export const SERVER_NAME = "consistorium";
 export const SERVER_VERSION = "0.3.0";
 
 export interface BridgeRuntime {
@@ -147,9 +147,9 @@ function optionalBoolean(args: Record<string, unknown>, key: string): boolean | 
 
 export function noConfigMessage(config: ResolvedConfig): string {
   return (
-    `No Context Bridge configuration found. ` +
+    `No Consistorium configuration found. ` +
     `Searched default locations and ${config.configPath}. ` +
-    `Run 'context-bridge init' to create a configuration, or set CONTEXT_BRIDGE_CONFIG to the config path.`
+    `Run 'consistorium init' to create a configuration, or set CONTEXT_BRIDGE_CONFIG to the config path.`
   );
 }
 

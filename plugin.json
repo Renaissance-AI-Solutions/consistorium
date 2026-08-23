@@ -1,14 +1,14 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
-  "name": "context-bridge",
+  "name": "consistorium",
   "version": "0.3.0",
   "description": "Local-first strategic context and agent continuity layer via MCP",
   "author": {
-    "name": "Context Bridge Contributors",
-    "url": "https://github.com/context-bridge/context-bridge"
+    "name": "Renaissance AI",
+    "url": "https://corpuslaw.us"
   },
-  "homepage": "https://github.com/context-bridge/context-bridge",
-  "repository": "https://github.com/context-bridge/context-bridge",
+  "homepage": "https://github.com/Renaissance-AI-Solutions/consistorium",
+  "repository": "https://github.com/Renaissance-AI-Solutions/consistorium",
   "license": "Apache-2.0",
   "keywords": ["mcp", "git", "worktree", "development-intelligence", "agent-plugins"]
 }

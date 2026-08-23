@@ -1,5 +1,9 @@
 # Consistorium
 
+[![CI](https://github.com/Renaissance-AI-Solutions/consistorium/actions/workflows/ci.yml/badge.svg)](https://github.com/Renaissance-AI-Solutions/consistorium/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/consistorium)](https://www.npmjs.com/package/consistorium)
+[![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
+
 > **Your strategist AI can't see your codebase. Fix that.**
 
 Consistorium is a local-first MCP server that gives any conversational model — ChatGPT included — grounded, current intelligence about the repositories your coding agents are actually working in: live git state, allowlisted documents, durable tasks, and agent-to-agent handoffs.

@@ -109,6 +109,7 @@ describe("isDeniedByPolicy", () => {
 
   it("denies .env", () => {
     expect(isDeniedByPolicy("/tmp/project/.env", projectRoot).denied).toBe(true);
+    expect(isDeniedByPolicy("/tmp/project/.ENV", projectRoot).denied).toBe(true);
   });
 
   it("denies the exact .git basename as well as descendants", () => {

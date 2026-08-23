@@ -1,10 +1,12 @@
-# Connect Bridge
+# Consistorium
+
+> Historical product-thinking note. The shipped system is documented in `README.md` and `DESIGN.md`.
 
 > **A continuity layer for multi-agent software development.**
 
-Connect Bridge helps developers—especially solo founders using multiple AI coding agents, models, harnesses, and subscriptions—carry work from one agent or session to another **without losing the state of the work or repeatedly reconstructing context by hand**.
+Consistorium helps developers—especially solo founders using multiple AI coding agents, models, harnesses, and subscriptions—carry work from one agent or session to another **without losing the state of the work or repeatedly reconstructing context by hand**.
 
-The name **Connect Bridge** is provisional and may change.
+The product is **Consistorium**; the MCP server that implements it is **Context Bridge**.
 
 ---
 
@@ -46,13 +48,13 @@ More importantly, reconstruction errors can cause an agent to work from stale as
 
 # Product Thesis
 
-**Connect Bridge makes AI development work portable between agents.**
+**Consistorium makes AI development work portable between agents.**
 
 It provides a standardized representation of the current state of a piece of work so another compatible agent can answer:
 
 > **"Where exactly did the previous agent leave off, and what should I do next?"**
 
-Connect Bridge should make switching between AI systems feel less like onboarding a new engineer every time and more like handing a task to another member of the same engineering team.
+Consistorium should make switching between AI systems feel less like onboarding a new engineer every time and more like handing a task to another member of the same engineering team.
 
 It is not primarily an AI memory product.
 
@@ -86,13 +88,13 @@ Agent A
   ↓
 Investigates problem
   ↓
-Connect Bridge
+Consistorium
   ↓
 Agent B
   ↓
 Implements solution
   ↓
-Connect Bridge
+Consistorium
   ↓
 Agent C
   ↓
@@ -101,7 +103,7 @@ Tests / reviews solution
 
 Today the developer is the bridge.
 
-**Connect Bridge should become the bridge.**
+**Consistorium should become the bridge.**
 
 The goal is not merely convenience. Better handoffs make sophisticated multi-model workflows practical for developers who cannot afford to run the most expensive agent for every stage of a project.
 
@@ -127,7 +129,7 @@ They may use combinations of:
 - custom agent harnesses
 - agent routers such as Outsourcerer
 
-Connect Bridge should be **vendor neutral**.
+Consistorium should be **vendor neutral**.
 
 No particular model provider should own the canonical representation of the work.
 
@@ -135,7 +137,7 @@ No particular model provider should own the canonical representation of the work
 
 # Core Concept: The Handoff
 
-The fundamental Connect Bridge primitive is a **handoff**.
+The fundamental Consistorium primitive is a **handoff**.
 
 A handoff represents enough durable state for another agent to continue a task intelligently.
 
@@ -198,7 +200,7 @@ What matters is that the information is **structured, inspectable, portable, and
 
 # Handoff ≠ Giant Transcript
 
-Connect Bridge should **not** solve continuity by blindly dumping entire chat histories into the next model.
+Consistorium should **not** solve continuity by blindly dumping entire chat histories into the next model.
 
 A raw transcript contains:
 
@@ -209,7 +211,7 @@ A raw transcript contains:
 - huge token costs
 - ambiguous conclusions
 
-Instead, Connect Bridge should extract and preserve the pieces of context that remain operationally relevant.
+Instead, Consistorium should extract and preserve the pieces of context that remain operationally relevant.
 
 Think:
 
@@ -229,7 +231,7 @@ The original source material can remain available for deeper inspection when nec
 
 # Canonical State vs Agent Commentary
 
-Connect Bridge should distinguish **facts** from **interpretation**.
+Consistorium should distinguish **facts** from **interpretation**.
 
 For example:
 
@@ -266,19 +268,19 @@ An agent's conclusion should never magically become canonical truth simply becau
 
 Repository and development context should remain local by default.
 
-Connect Bridge should not require developers to upload their codebase or agent history to a proprietary cloud service merely to transfer context between local agents.
+Consistorium should not require developers to upload their codebase or agent history to a proprietary cloud service merely to transfer context between local agents.
 
 ---
 
 ## 2. Vendor Neutral
 
-Connect Bridge belongs **between** agents.
+Consistorium belongs **between** agents.
 
 ```text
 Claude ─────┐
 Codex ──────┤
 Hermes ─────┤
-Cline ──────┼── Connect Bridge ── Project
+Cline ──────┼── Consistorium ── Project
 Local LLM ──┤
 Other ──────┘
 ```
@@ -289,7 +291,7 @@ The architecture should avoid assumptions tied to one provider whenever practica
 
 ## 3. Grounded Context Beats Generated Memory
 
-Whenever possible, Connect Bridge should derive state from authoritative sources:
+Whenever possible, Consistorium should derive state from authoritative sources:
 
 - Git
 - filesystem
@@ -328,7 +330,7 @@ Do not automatically inject the entire project history into every session.
 
 ## 5. Humans Remain in Control
 
-Connect Bridge should make agent state visible and inspectable.
+Consistorium should make agent state visible and inspectable.
 
 Developers should be able to understand:
 
@@ -342,7 +344,7 @@ Developers should be able to understand:
 
 ## 6. Do Not Become Another Coding Agent
 
-Connect Bridge should resist product creep.
+Consistorium should resist product creep.
 
 Its initial job is not to:
 
@@ -359,7 +361,7 @@ Its job is to make those systems work together better.
 
 # Hermes Integration
 
-Hermes is an excellent first-class integration because it can operate as an orchestration environment while Connect Bridge supplies continuity.
+Hermes is an excellent first-class integration because it can operate as an orchestration environment while Consistorium supplies continuity.
 
 Conceptually:
 
@@ -369,7 +371,7 @@ Conceptually:
                     │ Orchestration │
                     └───────┬───────┘
                             │
-                     Connect Bridge
+                     Consistorium
                             │
              ┌──────────────┼──────────────┐
              │              │              │
@@ -398,7 +400,7 @@ Hermes should be able to ask questions such as:
 
 # Outsourcerer Integration
 
-Connect Bridge can complement Outsourcerer without duplicating it.
+Consistorium can complement Outsourcerer without duplicating it.
 
 A clean separation is:
 
@@ -415,7 +417,7 @@ External Agent
    │
    │ performs work
    ▼
-Connect Bridge
+Consistorium
    │
    │ preserves result + state
    ▼
@@ -426,7 +428,7 @@ In this model:
 
 - **Hermes = orchestrator**
 - **Outsourcerer = execution/model router**
-- **Connect Bridge = continuity/state layer**
+- **Consistorium = continuity/state layer**
 
 These responsibilities should remain distinct.
 
@@ -434,7 +436,7 @@ These responsibilities should remain distinct.
 
 # Agent Observability
 
-Connect Bridge can eventually provide a common event model for work performed by external agents.
+Consistorium can eventually provide a common event model for work performed by external agents.
 
 Examples:
 
@@ -479,7 +481,7 @@ This would allow work happening outside Hermes to appear coherently inside a Her
 
 # Control Plane
 
-Longer term, Connect Bridge should support **controlled steering**, not merely passive observation.
+Longer term, Consistorium should support **controlled steering**, not merely passive observation.
 
 For example:
 
@@ -492,7 +494,7 @@ change task instruction
 request status
 ```
 
-Where supported, a Hermes action could map through Connect Bridge to the underlying execution system.
+Where supported, a Hermes action could map through Consistorium to the underlying execution system.
 
 This should use explicit, narrowly scoped control operations rather than arbitrary shell execution.
 
@@ -504,7 +506,7 @@ Task handoffs are only one layer.
 
 An agent also needs lightweight awareness of the broader project.
 
-Connect Bridge should eventually expose things such as:
+Consistorium should eventually expose things such as:
 
 ```text
 project
@@ -526,7 +528,7 @@ An agent joining the project should be able to cheaply establish orientation wit
 
 MCP is a strong initial interoperability layer.
 
-A possible Connect Bridge MCP surface could eventually look like:
+A possible Consistorium MCP surface could eventually look like:
 
 ```text
 connect.project_snapshot
@@ -557,7 +559,7 @@ The agent asks for what it needs instead of receiving a massive mandatory contex
 
 # Agent Skills / Plugin Packaging
 
-Connect Bridge should be designed so that an agent can learn **how to use the bridge**, not merely receive MCP tools.
+Consistorium should be designed so that an agent can learn **how to use the bridge**, not merely receive MCP tools.
 
 A portable agent plugin could contain:
 
@@ -597,7 +599,7 @@ A developer tells Hermes:
 
 > Continue the USDC launch work.
 
-Hermes queries Connect Bridge and discovers:
+Hermes queries Consistorium and discovers:
 
 ```text
 Active task:
@@ -641,7 +643,7 @@ The MVP should remain deliberately small.
 
 ## MVP Goal
 
-Demonstrate that one AI coding agent can perform work and another agent can reliably resume it using Connect Bridge with substantially less manual reconstruction.
+Demonstrate that one AI coding agent can perform work and another agent can reliably resume it using Consistorium with substantially less manual reconstruction.
 
 ### MVP should support:
 
@@ -666,7 +668,7 @@ Demonstrate that one AI coding agent can perform work and another agent can reli
 
 ### Prefer automatic facts where possible.
 
-For example, Connect Bridge should determine:
+For example, Consistorium should determine:
 
 ```text
 HEAD
@@ -705,7 +707,7 @@ For example, a future planning capability could permit an agent to update a desi
 
 # Non-Goals for MVP
 
-Connect Bridge does **not** initially need:
+Consistorium does **not** initially need:
 
 - a cloud platform
 - user accounts
@@ -731,7 +733,7 @@ The MVP needs to prove one thing exceptionally well:
 
 A successful early demo should be able to show:
 
-### Without Connect Bridge
+### Without Consistorium
 
 ```text
 Agent A finishes
@@ -747,12 +749,12 @@ Agent B re-investigates repository
 Agent B eventually continues
 ```
 
-### With Connect Bridge
+### With Consistorium
 
 ```text
 Agent A finishes
       ↓
-Connect Bridge records handoff
+Consistorium records handoff
       ↓
 Agent B reads handoff + verifies state
       ↓
@@ -772,7 +774,7 @@ Metrics worth eventually measuring:
 
 # Longer-Term Vision
 
-If the core primitive works, Connect Bridge can evolve into the missing connective tissue between increasingly heterogeneous AI development environments.
+If the core primitive works, Consistorium can evolve into the missing connective tissue between increasingly heterogeneous AI development environments.
 
 Possible future capabilities include:
 
@@ -800,7 +802,7 @@ Eventually a developer should be able to fluidly move work between models and ha
 
 # Open Source Philosophy
 
-Connect Bridge should be useful as an open interoperability layer rather than a mechanism for locking developers into another platform.
+Consistorium should be useful as an open interoperability layer rather than a mechanism for locking developers into another platform.
 
 The core protocol, schemas, and local tooling should be suitable for open source.
 
@@ -828,9 +830,9 @@ When considering a feature, ask:
 
 > **Does this make it easier for one agent to understand and safely continue work performed by another agent?**
 
-If yes, it may belong in Connect Bridge.
+If yes, it may belong in Consistorium.
 
-If it primarily makes Connect Bridge itself into an orchestrator, coding agent, IDE, or project-management suite, it probably does not.
+If it primarily makes Consistorium itself into an orchestrator, coding agent, IDE, or project-management suite, it probably does not.
 
 ---
 
@@ -840,4 +842,4 @@ If it primarily makes Connect Bridge itself into an orchestrator, coding agent, 
 
 The developer should choose an AI system because it is the best system for the next task—not because all of the project's context is trapped inside the previous one.
 
-Connect Bridge makes the work portable.
+Consistorium makes the work portable.

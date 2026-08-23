@@ -116,6 +116,7 @@ describe("ContextService", () => {
     const svc = new ContextService(makeConfig(real));
     await expect(svc.compare("proj", "main; rm -rf /", "feat")).rejects.toThrow(/Invalid ref/);
     await expect(svc.compare("proj", "main", "feat$(evil)")).rejects.toThrow(/Invalid ref/);
+    await expect(svc.compare("proj", "4b825dc642cb6eb9a060e54bf8d69288fbee4904", "HEAD:.env")).rejects.toThrow(/Invalid ref/);
   });
 
   it("search within project", async () => {

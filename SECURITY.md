@@ -4,13 +4,16 @@
 
 | Version | Supported          |
 |---------|------------------------------------------------|
-| 0.1.x   | :white_check_mark: active development          |
+| 0.3.x   | :white_check_mark: active development          |
+| < 0.3   | :x: superseded; upgrade for the discovery fixes |
 
 ## Reporting a Vulnerability
 
 **Do not open a public issue for a security vulnerability.**
 
-Email the maintainers at the address listed in `plugin.json` / repository security advisories, or use GitHub's private vulnerability reporting flow if the repository is hosted on GitHub.
+Use GitHub's [private vulnerability reporting](https://docs.github.com/en/code-security/security-advisories/guidance-on-reporting-and-writing-information-about-vulnerabilities/privately-reporting-a-security-vulnerability) on this repository. That is the preferred channel and needs no public disclosure.
+
+<!-- TODO(release): add a security contact address here, or delete this line if GitHub advisories are the only channel. -->
 
 Please include:
 
@@ -39,7 +42,8 @@ If you believe any invariant is violated, please report it as a vulnerability ev
 - Do not allowlist directories that contain secrets you do not want surfaced via context documents or search previews, even though denylists add a second defense layer.
 - Review `context` globs before committing them to a shared/dotfiles repo — they control which files an MCP client can read.
 - MCP clients run `dist/mcp/server.js` locally; ensure the client you use respects the plugin's declared roots and does not proxy Context Bridge data to the network without consent.
-- A fresh agent should discover `context.list_projects` → `context.task_list` → `context.task_get` → `context.handoff_list` → `context.handoff_get`, then verify with the live observation tools. Lists are summaries; detail retrieval is deliberate.
+- A fresh agent should call `context_list_projects` then `context_project_briefing`. Drill into `task_*` / `handoff_*` / `project_snapshot` only when the briefing is not enough.
+- The Streamable HTTP listener binds 127.0.0.1 and requires `CONTEXT_BRIDGE_TOKEN` unless `--allow-anonymous` is set on loopback. Do not put an unauthenticated public URL in front of it.
 
 ## Disclosure
 

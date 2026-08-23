@@ -82,7 +82,7 @@ export class ContextService {
 
   async projectSnapshot(
     name: string,
-    opts?: { recentLimit?: number; includeSessions?: boolean }
+    opts?: { recentLimit?: number; includeSessions?: boolean; includeDocuments?: boolean }
   ): Promise<ProjectSnapshot> {
     const project = this.config.projects.find((p) => p.name === name);
     if (!project) throw Object.assign(new Error(`Project not found: ${name}`), { code: "NOT_FOUND" });
@@ -96,9 +96,11 @@ export class ContextService {
       ? null
       : await git.getRepoState(project.canonicalPath, opts?.recentLimit ?? 10).catch(() => null);
 
-    const contextDocs = await docs
-      .discoverContextDocuments(project, this.policy)
-      .catch(() => [] as ContextDocSummary[]);
+    const contextDocs = opts?.includeDocuments === false
+      ? []
+      : await docs
+          .discoverContextDocuments(project, this.policy)
+          .catch(() => [] as ContextDocSummary[]);
 
     // Recent changes for the main repo state
     let recentChanges: RecentChanges | undefined;
@@ -307,9 +309,9 @@ export class ContextService {
     if (!project) throw Object.assign(new Error(`Project not found: ${projectName}`), { code: "NOT_FOUND" });
     if (!base || !target) throw Object.assign(new Error("base and target refs are required"), { code: "INVALID_ARG" });
 
-    // Validate refs look sane (prevent injection into git args)
-    // Allow: branch names, tags, SHAs, HEAD, refs/..., with :/ , -, _, ., /, but not shell metachars
-    const refPattern = /^[a-zA-Z0-9._\/\-@^{~:]+$/;
+    // Allow branch names, tags, SHAs, HEAD, and peel syntax. Reject ':' so
+    // callers cannot use treeish:path to dump tracked secret files via diff.
+    const refPattern = /^[a-zA-Z0-9._\/\-@^{~]+$/;
     if (!refPattern.test(base) || !refPattern.test(target)) {
       throw Object.assign(new Error(`Invalid ref format: base=${base} target=${target}`), { code: "INVALID_REF" });
     }

@@ -2,7 +2,7 @@
 
 This roadmap separates **working now** from **designed for later**. Nothing listed under "Later" is claimed as shipped.
 
-## Working now (v0.1 MVP)
+## Working now (v0.3)
 
 - Agent Plugins v1.0 packaging: `plugin.json`, `mcp.json` (stdio), `skills/project-state/SKILL.md`
 - Configuration: YAML/JSON, XDG + `PLUGIN_DATA` + `CONTEXT_BRIDGE_CONFIG` resolution, `context-bridge init` (interactive + flags), `config show` / `config validate`
@@ -10,26 +10,26 @@ This roadmap separates **working now** from **designed for later**. Nothing list
 - Providers: git (worktree discovery, dirty/staged/untracked, branch/HEAD/detached, ahead/behind, recent commits, diff stat, bounded diff, merge-base), documents (discovery + bounded read), search (bounded plain-text)
 - Context plane: `ContextService` plus `ContinuityStore` behind a transport-agnostic facade
 - Continuity: bounded durable task/handoff JSON outside configured repositories by default, atomic writes, restrictive permissions, runtime Zod validation, canonical-vs-asserted Git state, refresh/staleness reporting
-- MCP: 17 tools over stdio, including `task_upsert`, `task_list`, `task_get`, `handoff_create`, `handoff_list`, and `handoff_get`, with compact progressive retrieval
-- Skill: `project-state` (project → task → latest handoff → detail → direct verification)
-- Tests: security, config, git, documents, search, sessions, MCP, continuity, and external-worktree acceptance coverage on synthetic tmp fixtures
+- MCP: 18 tools over stdio and Streamable HTTP, including `project_briefing`, `task_*`, and `handoff_*`, named `context_*` so OpenAI-style function-name validation accepts them (pre-0.3 dotted names still dispatch)
+- Discovery: pattern-directed document resolution — literal patterns stat directly, globs walk only their static prefix, with a scan budget so repositories with hundreds of thousands of files stay bounded
+- Skill: `project-state` (project → briefing → task/handoff detail → direct verification)
+- HTTP: loopback Streamable HTTP at `/mcp`, bearer token, read-only by default, Host-header check
+- Tests: security, config, git, documents, search, sessions, MCP, continuity, briefing, HTTP auth, and Agent A/B + Streamable HTTP e2e on synthetic tmp fixtures
 - Tooling/docs: ESLint 9 flat config, README, THREAT_MODEL, DESIGN, SECURITY, CONTRIBUTING, LICENSE, example config, and Hermes CLI setup
 
-## Next (v0.2 — security & coverage hardening, no scope creep)
+## Next (hardening, no scope creep)
 
 - Fuzz path containment with adversarial fixture trees (long symlink chains, case-insensitive fs edges, unicode normalization)
 - Property-based tests for truncation invariants
 - Optional `includeIgnored` / `excludeGlobs` flags on search (already internal, just not exposed as MCP args yet)
 - Per-project limit profiles beyond the current global bounded config
-- `context-bridge doctor` — prints `plugin.json`/`mcp.json` schema validation, effective config, roots, and a smoke `project_snapshot` without needing an MCP client
+- Broader `plugin.json` / `mcp.json` schema validation inside `doctor`
 
 ## Later (designed, not committed)
 
-### Streamable HTTP transport
+### Public ChatGPT OAuth
 
-- Add `src/mcp/http.ts` reusing the same `ContextService` and tool handlers.
-- Declare alongside stdio in `mcp.json` as `type: "streamable-http"`.
-- No core rewrite; transport is the only new file.
+- Streamable HTTP exists. Public internet use still needs OAuth 2.1 (CIMD/DCR) per current OpenAI plugin auth docs. Not required for Secure MCP Tunnel / loopback.
 
 ### Passive agent adapters (opt-in, best-effort)
 

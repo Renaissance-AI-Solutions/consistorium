@@ -6,7 +6,7 @@ Context Bridge sits between **an AI agent (MCP client)** and **the developer's l
 
 - The agent is **untrusted** with respect to the filesystem: it may be prompted adversarially or hallucinate paths.
 - The filesystem is **trusted** but contains sensitive data (secrets, keys, private repos).
-- The plugin process is **local, user-owned**, and should not exfiltrate data without explicit user action.
+- The plugin process is **local, user-owned**. Streamable HTTP is an optional loopback listener for ChatGPT Developer mode / Secure MCP Tunnel, not a public service.
 
 ```
 [ AI (untrusted prompt influence) ] --MCP--> [ Context Bridge ] --read-only allowlisted git/fs--> [ Projects ]
@@ -35,13 +35,13 @@ Context Bridge sits between **an AI agent (MCP client)** and **the developer's l
 | Prompt-injected agent | Can call MCP tools with arbitrary string arguments (project name, path, ref, query) |
 | Malicious workspace content | Can plant symlinks, special filenames, large files, binary payloads inside an allowed repo |
 | Local co-tenant | Less relevant in single-user MVP; future: multi-user host |
-| Network observer | MVP has no network egress; future Streamable HTTP must be scoped |
+| Network observer | Streamable HTTP is loopback + bearer by default; a public bind without auth is refused |
 
 Assumptions:
 
 - The OS, Node.js, and `git` binary are trusted.
 - The user who runs `context-bridge init` is trusted to choose allowlisted roots.
-- MCP transport (stdio) is authenticated by the local client; we do not add auth in v0.1.
+- MCP stdio is authenticated by the local client that spawned the process. Streamable HTTP requires a bearer token unless anonymous loopback is explicitly enabled.
 
 ## 5. Threats & mitigations
 
@@ -169,7 +169,7 @@ Assumptions:
 
 **Mitigations**:
 
-- No network requests in the MVP core. No telemetry. No embeddings service. `SECURITY.md` and `README.md` state this explicitly.
+- The core does not make outbound network requests, emit telemetry, or call an embeddings service. Optional Streamable HTTP is an inbound loopback listener; it requires a bearer token unless anonymous loopback is explicitly enabled, and it refuses unauthenticated non-loopback binds.
 - Future Streamable HTTP will be local-first and opt-in; docs will require threat review before any remote transport.
 
 ## 6. Non-goals / accepted risks

@@ -13,6 +13,8 @@ projects:
   - name: my-project
     path: /Users/me/dev/my-project
     context:
+      - README.md
+      - DESIGN.md
       - TODO.md
       - ROADMAP.md
       - docs/**/*.md

@@ -252,6 +252,87 @@ export interface Provenance {
 }
 
 // ---------------------------------------------------------------------------
+// Strategic briefing (grounded assembly — not a generated essay)
+// ---------------------------------------------------------------------------
+
+export type BriefingClaimType = "live_observation" | "agent_record";
+
+export interface BriefingSource {
+  kind: "git" | "document" | "task" | "handoff";
+  claimType: BriefingClaimType;
+  observedAt: string;
+  label: string;
+  path?: string;
+  commit?: string;
+  taskId?: string;
+  handoffId?: string;
+  agent?: string;
+}
+
+export interface BriefingExcerpt {
+  path: string;
+  role: "purpose" | "architecture" | "plan" | "other";
+  excerpt: string;
+  truncated: boolean;
+  modifiedAt: string;
+}
+
+export interface BriefingAction {
+  text: string;
+  source: BriefingSource;
+}
+
+export interface ProjectBriefing {
+  project: ProjectInfo;
+  purpose?: BriefingExcerpt;
+  architecture?: BriefingExcerpt;
+  live: {
+    availability: "available" | "not_git" | "unavailable";
+    branch: string | null;
+    head: string | null;
+    headShort: string | null;
+    isDirty: boolean | null;
+    isDetached: boolean;
+    error?: string;
+    worktreeCount: number;
+    dirtyWorktrees: Array<{ path: string; branch: string | null; isDirty: boolean | null }>;
+    recentCommits: CommitSummary[];
+  };
+  documents: BriefingExcerpt[];
+  continuity: {
+    openTasks: Array<{
+      taskId: string;
+      title: string;
+      state: string;
+      nextActions: string[];
+      updatedAt: string;
+      provenance: { name?: string; harness?: string; model?: string; sessionId?: string };
+    }>;
+    latestHandoffs: Array<{
+      handoffId: string;
+      taskId: string;
+      status: string;
+      summary: string;
+      agent: { name?: string; harness?: string; model?: string; sessionId?: string };
+      createdAt: string;
+      blockers: string[];
+      decisions: string[];
+      nextActions: string[];
+      stale?: boolean | null;
+    }>;
+    blockers: BriefingAction[];
+    decisions: BriefingAction[];
+    nextActions: BriefingAction[];
+  };
+  recommendedFocus: {
+    items: BriefingAction[];
+    rationale: string;
+  };
+  caveats: string[];
+  provenance: Provenance & { sources: BriefingSource[] };
+}
+
+// ---------------------------------------------------------------------------
 // MCP tool wrappers
 // ---------------------------------------------------------------------------
 
@@ -266,6 +347,8 @@ export const DEFAULT_LIMITS = {
   maxSearchResults: 100,
   maxSearchFileSizeBytes: 512 * 1024,
   maxContextDocsPerProject: 200,
+  // Directory entries discovery may examine before giving up on a subtree.
+  maxContextScanEntries: 20_000,
   maxCommitsDefault: 20,
   maxCommitsMax: 100,
   maxUntrackedPreview: 50,

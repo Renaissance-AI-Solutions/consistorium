@@ -3,7 +3,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
 import { mkdtemp, cleanup, createGitRepo, commitFile, git } from "./helpers.js";
-import { MCP_SERVER_INSTRUCTIONS, TOOL_DEFS } from "../mcp/tools.js";
+import { MCP_SERVER_INSTRUCTIONS, TOOL_DEFS, canonicalToolName } from "../mcp/tools.js";
 import { ContextService } from "../core/context.js";
 import { SecurityPolicy } from "../core/security.js";
 import type { ResolvedConfig } from "../core/types.js";
@@ -13,10 +13,28 @@ describe("MCP tool defs", () => {
     const first512 = MCP_SERVER_INSTRUCTIONS.slice(0, 512);
     expect(first512).toContain("vendor-neutral");
     expect(first512).toContain("passive and read-only");
-    expect(first512).toContain("context.project_snapshot");
-    expect(first512).toContain("context.handoff_list/handoff_get");
+    expect(first512).toContain("context_project_briefing");
+    expect(first512).toContain("context_project_snapshot");
+    expect(first512).toContain("context_handoff_list/handoff_get");
     expect(MCP_SERVER_INSTRUCTIONS).toContain("evidence to verify");
     expect(MCP_SERVER_INSTRUCTIONS).not.toMatch(/OpenAI|ChatGPT|Claude|Cursor|Hermes/);
+  });
+
+  it("names every tool so OpenAI-style function validation accepts it", () => {
+    // OpenAI validates function names against ^[a-zA-Z0-9_-]{1,64}$, which
+    // rejects the dotted tool names MCP itself allows.
+    for (const t of TOOL_DEFS) {
+      expect(t.name).toMatch(/^[a-zA-Z0-9_-]{1,64}$/);
+    }
+  });
+
+  it("still dispatches the pre-0.3 dotted tool names", () => {
+    for (const t of TOOL_DEFS) {
+      const legacy = t.name.replace(/^context_/, "context.");
+      expect(canonicalToolName(legacy)).toBe(t.name);
+    }
+    expect(canonicalToolName("context_project_briefing")).toBe("context_project_briefing");
+    expect(canonicalToolName("nonsense")).toBe("nonsense");
   });
 
   it("ships a portable node-based Agent Plugins STDIO entry", async () => {
@@ -33,46 +51,51 @@ describe("MCP tool defs", () => {
   });
 
   it("exposes continuity and observability tools with valid inputSchemas", () => {
-    expect(TOOL_DEFS.length).toBe(17);
+    expect(TOOL_DEFS.length).toBe(18);
     const names = TOOL_DEFS.map((t) => t.name);
-    expect(names).toContain("context.list_projects");
-    expect(names).toContain("context.project_snapshot");
-    expect(names).toContain("context.list_worktrees");
-    expect(names).toContain("context.worktree_snapshot");
-    expect(names).toContain("context.recent_changes");
-    expect(names).toContain("context.compare");
-    expect(names).toContain("context.search");
-    expect(names).toContain("context.list_context_documents");
-    expect(names).toContain("context.read_context_document");
-    expect(names).toContain("context.list_agent_sessions");
-    expect(names).toContain("context.session_snapshot");
-    expect(names).toContain("context.task_upsert");
-    expect(names).toContain("context.task_list");
-    expect(names).toContain("context.task_get");
-    expect(names).toContain("context.handoff_create");
-    expect(names).toContain("context.handoff_list");
-    expect(names).toContain("context.handoff_get");
+    expect(names).toContain("context_list_projects");
+    expect(names).toContain("context_project_briefing");
+    expect(names).toContain("context_project_snapshot");
+    expect(names).toContain("context_list_worktrees");
+    expect(names).toContain("context_worktree_snapshot");
+    expect(names).toContain("context_recent_changes");
+    expect(names).toContain("context_compare");
+    expect(names).toContain("context_search");
+    expect(names).toContain("context_list_context_documents");
+    expect(names).toContain("context_read_context_document");
+    expect(names).toContain("context_list_agent_sessions");
+    expect(names).toContain("context_session_snapshot");
+    expect(names).toContain("context_task_upsert");
+    expect(names).toContain("context_task_list");
+    expect(names).toContain("context_task_get");
+    expect(names).toContain("context_handoff_create");
+    expect(names).toContain("context_handoff_list");
+    expect(names).toContain("context_handoff_get");
 
     for (const t of TOOL_DEFS) {
-      expect(t.name).toMatch(/^context\./);
+      expect(t.name).toMatch(/^context_/);
       expect(t.description.length).toBeGreaterThan(10);
       expect(t.inputSchema).toBeDefined();
       expect((t.inputSchema as any).type).toBe("object");
+      expect(t.annotations).toBeDefined();
+      expect(typeof t.annotations.readOnlyHint).toBe("boolean");
     }
+    expect(TOOL_DEFS.find((t) => t.name === "context_task_upsert")!.annotations.readOnlyHint).toBe(false);
+    expect(TOOL_DEFS.find((t) => t.name === "context_project_briefing")!.annotations.readOnlyHint).toBe(true);
   });
 
   it("project_snapshot requires project", () => {
-    const t = TOOL_DEFS.find((x) => x.name === "context.project_snapshot")!;
+    const t = TOOL_DEFS.find((x) => x.name === "context_project_snapshot")!;
     expect((t.inputSchema as any).required).toContain("project");
   });
 
   it("compare requires project, base, target", () => {
-    const t = TOOL_DEFS.find((x) => x.name === "context.compare")!;
+    const t = TOOL_DEFS.find((x) => x.name === "context_compare")!;
     expect((t.inputSchema as any).required).toEqual(expect.arrayContaining(["project", "base", "target"]));
   });
 
   it("handoff creation requires a task, status, and summary", () => {
-    const t = TOOL_DEFS.find((x) => x.name === "context.handoff_create")!;
+    const t = TOOL_DEFS.find((x) => x.name === "context_handoff_create")!;
     expect((t.inputSchema as any).required).toEqual(expect.arrayContaining(["project", "taskId", "status", "summary"]));
     expect((t.inputSchema as any).properties.assertedRepositoryState.properties.isDirty.type).toBe("boolean");
   });

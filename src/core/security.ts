@@ -85,7 +85,7 @@ function containsDeniedSegment(canonicalPath: string, projectRoot: string): bool
   // For absolute path outside project: check all segments.
   const segs = canonicalPath.split(path.sep).filter(Boolean);
   for (const seg of segs) {
-    if (DENIED_PATH_SEGMENTS.has(seg)) return true;
+    if (DENIED_PATH_SEGMENTS.has(seg) || DENIED_PATH_SEGMENTS.has(seg.toLowerCase())) return true;
   }
   // Also check relative to project root segments
   try {
@@ -118,20 +118,22 @@ export function isDeniedByPolicy(
   opts?: { allowBinary?: boolean }
 ): { denied: boolean; reason?: string } {
   const base = path.basename(canonicalPath);
+  const baseLower = base.toLowerCase();
+  const segs = canonicalPath.split(path.sep).filter(Boolean);
 
   // `**/.git/**` does not match the exact `.git` directory itself.
-  if (base === ".git" || canonicalPath.split(path.sep).includes(".git")) {
+  if (baseLower === ".git" || segs.some((seg) => seg.toLowerCase() === ".git")) {
     return { denied: true, reason: "denied .git path" };
   }
 
-  // 1. Exact denied basenames
-  if (DENIED_BASENAMES.has(base)) {
+  // 1. Exact denied basenames (case-insensitive: macOS default is case-preserving)
+  if (DENIED_BASENAMES.has(base) || DENIED_BASENAMES.has(baseLower)) {
     return { denied: true, reason: `denied basename: ${base}` };
   }
 
   // 2. Basename globs
   for (const g of DENIED_BASENAME_GLOBS) {
-    if (minimatch(base, g, { dot: true })) {
+    if (minimatch(base, g, { dot: true, nocase: true })) {
       return { denied: true, reason: `denied basename glob ${g}: ${base}` };
     }
   }

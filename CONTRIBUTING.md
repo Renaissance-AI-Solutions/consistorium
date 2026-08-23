@@ -32,7 +32,7 @@ hermes mcp add context-bridge \
   --env CONTEXT_BRIDGE_STATE_DIR=/portable/path/context-bridge-state
 ```
 
-Smoke the continuity path from a fresh client process: call `context.task_upsert`, `context.handoff_create`, then `context.task_list`, `context.task_get`, `context.handoff_list`, and `context.handoff_get`. Confirm that handoff `repositoryState.canonical` is live and that any supplied `assertedRepositoryState` appears only under assertions/mismatches.
+After `npm run build`, `node dist/cli/index.js doctor` should smoke the configured briefing. The continuity path is `context_task_upsert` / `context_handoff_create` on stdio, then a fresh client reconstructs via `context_project_briefing`. Confirm handoff `repositoryState.canonical` is live and assertions never replace it.
 
 ## Tests
 

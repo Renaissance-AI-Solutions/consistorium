@@ -12,153 +12,180 @@ import { DEFAULT_LIMITS } from "../core/types.js";
 import { isDeniedByPolicy, isBinaryPath, type SecurityPolicy } from "../core/security.js";
 import type { ResolvedProject } from "../core/types.js";
 
-async function walk(
+const GLOB_MAGIC = /[*?[\]{}!+@()]/;
+const SKIP_DIRS = new Set([".git", "node_modules", ".ssh", ".aws", ".gnupg"]);
+
+interface ScanBudget {
+  remaining: number;
+}
+
+function hasMagic(value: string): boolean {
+  return GLOB_MAGIC.test(value);
+}
+
+/**
+ * Leading segments of a glob that contain no magic, so traversal can start at
+ * the only subtree the pattern is able to match ("docs/**\/*.md" -> "docs").
+ */
+function staticPrefix(pattern: string): string {
+  const parts = pattern.split(path.posix.sep);
+  const prefix: string[] = [];
+  for (const part of parts.slice(0, -1)) {
+    if (hasMagic(part)) break;
+    prefix.push(part);
+  }
+  return prefix.join(path.posix.sep);
+}
+
+/**
+ * Canonical path for one candidate file, or null when containment, policy,
+ * or type checks reject it.
+ */
+async function acceptFile(
+  full: string,
+  canonProject: string,
+  policy: SecurityPolicy | null
+): Promise<string | null> {
+  let canonicalFile: string;
+  try {
+    canonicalFile = await fs.promises.realpath(full);
+  } catch {
+    return null;
+  }
+  const normFile = path.normalize(canonicalFile).replace(/\/+$/, "") || "/";
+  const normProject = path.normalize(canonProject).replace(/\/+$/, "") || "/";
+  if (normFile !== normProject && !normFile.startsWith(normProject + path.sep)) return null;
+  if (policy && !policy.isInsideAllowedRoot(normFile)) return null;
+  if (isDeniedByPolicy(normFile, canonProject).denied) return null;
+  if (isBinaryPath(normFile)) return null;
+  return canonicalFile;
+}
+
+/**
+ * Yield canonical file paths under `dir`. Streaming rather than array-returning:
+ * a directory holding more entries than V8 accepts as spread arguments used to
+ * overflow the stack when subtree results were pushed into a parent array.
+ */
+async function* walkFiles(
   dir: string,
-  projectRoot: string,
+  canonProject: string,
   policy: SecurityPolicy | null,
-  visited: Set<string>
-): Promise<string[]> {
-  const results: string[] = [];
+  visited: Set<string>,
+  budget: ScanBudget
+): AsyncGenerator<string> {
   let canonicalDir: string;
   try {
     canonicalDir = await fs.promises.realpath(dir);
   } catch {
-    return results;
+    return;
   }
-  // Prevent symlink loops: track visited canonical dirs
-  if (visited.has(canonicalDir)) return results;
+  // Prevent symlink loops: track visited canonical dirs.
+  if (visited.has(canonicalDir)) return;
   visited.add(canonicalDir);
 
-  // Containment: dir must be inside projectRoot
-  if (policy) {
-    try {
-      const canonProject = await fs.promises.realpath(projectRoot).catch(() => path.normalize(projectRoot));
-      if (!canonicalDir.startsWith(canonProject + path.sep) && canonicalDir !== canonProject) {
-        // Allow if dir is projectRoot itself? Already checked outer.
-        // If walk dir escaped via symlink, skip.
-        return results;
-      }
-    } catch { /* ignore */ }
-  }
+  // Containment: dir must be inside projectRoot.
+  if (canonicalDir !== canonProject && !canonicalDir.startsWith(canonProject + path.sep)) return;
 
   let entries: fs.Dirent[];
   try {
     entries = await fs.promises.readdir(dir, { withFileTypes: true });
   } catch {
-    return results;
+    return;
   }
 
   for (const ent of entries) {
+    if (budget.remaining <= 0) return;
+    budget.remaining -= 1;
     const full = path.join(dir, ent.name);
-    let stat: fs.Stats | null = null;
-    try {
-      stat = await fs.promises.lstat(full);
-    } catch {
-      continue;
+
+    let isDir = ent.isDirectory();
+    if (ent.isSymbolicLink()) {
+      try {
+        isDir = (await fs.promises.stat(full)).isDirectory();
+      } catch {
+        continue;
+      }
     }
 
-    // Skip if symlink to outside? We'll check realpath containment below.
-
-    if (ent.isDirectory() || (ent.isSymbolicLink() && stat.isDirectory?.())) {
-      // For symlink dirs, we need to check realpath
+    if (isDir) {
+      if (SKIP_DIRS.has(ent.name)) continue;
       if (ent.isSymbolicLink()) {
+        // Symlinked directory: only follow it when it stays inside the project.
         try {
           const real = await fs.promises.realpath(full);
-          // Containment: must remain inside projectRoot
-          const canonProject = await fs.promises.realpath(projectRoot).catch(() => path.normalize(projectRoot));
           const normReal = path.normalize(real).replace(/\/+$/, "") || "/";
-          const normProject = path.normalize(canonProject).replace(/\/+$/, "") || "/";
-          if (normReal !== normProject && !normReal.startsWith(normProject + path.sep)) {
-            continue; // symlink escape — skip
-          }
-          // Also skip denied segments
-          const denied = isDeniedByPolicy(normReal, canonProject);
-          if (denied.denied) continue;
+          if (normReal !== canonProject && !normReal.startsWith(canonProject + path.sep)) continue;
+          if (isDeniedByPolicy(normReal, canonProject).denied) continue;
         } catch {
           continue;
         }
       }
-
-      // Skip denied dirs: .git, node_modules, .ssh etc.
-      const base = ent.name;
-      if (base === ".git" || base === "node_modules" || base === ".ssh" || base === ".aws" || base === ".gnupg") {
-        continue;
-      }
-      // Recurse
-      const sub = await walk(full, projectRoot, policy, visited);
-      results.push(...sub);
+      yield* walkFiles(full, canonProject, policy, visited, budget);
     } else if (ent.isFile() || ent.isSymbolicLink()) {
-      // Resolve symlink files to canonical and check containment + denied
-      let canonicalFile: string;
-      try {
-        canonicalFile = await fs.promises.realpath(full);
-      } catch {
-        continue;
-      }
-      const canonProject = await fs.promises.realpath(projectRoot).catch(() => path.normalize(projectRoot));
-      const normFile = path.normalize(canonicalFile).replace(/\/+$/, "") || "/";
-      const normProject = path.normalize(canonProject).replace(/\/+$/, "") || "/";
-      if (normFile !== normProject && !normFile.startsWith(normProject + path.sep)) {
-        continue; // symlink escape
-      }
-      // Also check if original path escapes via policy roots
-      if (policy && !policy.isInsideAllowedRoot(normFile)) {
-        continue;
-      }
-
-      // Apply denied policy
-      const denied = isDeniedByPolicy(normFile, canonProject);
-      if (denied.denied) continue;
-
-      // Binary: skip for discovery (documents are text)
-      if (isBinaryPath(normFile)) continue;
-
-      results.push(canonicalFile);
+      const accepted = await acceptFile(full, canonProject, policy);
+      if (accepted) yield accepted;
     }
   }
-
-  return results;
 }
 
 /**
  * Discover context documents matching configured patterns.
+ *
+ * Patterns are root-relative. A pattern with no glob magic names exactly one
+ * file and is resolved by a direct stat; a glob is walked only from its static
+ * prefix. Neither form scans unrelated subtrees, so a repository with hundreds
+ * of thousands of data files still resolves its handful of documents.
  */
 export async function discoverContextDocuments(
   project: ResolvedProject,
   policy: SecurityPolicy | null,
-  opts?: { maxDocs?: number }
+  opts?: { maxDocs?: number; maxScanEntries?: number }
 ): Promise<ContextDocSummary[]> {
   const maxDocs = opts?.maxDocs ?? DEFAULT_LIMITS.maxContextDocsPerProject;
+  const patterns = project.contextPatterns ?? [];
+  if (patterns.length === 0) return [];
 
-  if (!project.contextPatterns || project.contextPatterns.length === 0) {
-    return [];
+  const canonProject = await fs.promises
+    .realpath(project.canonicalPath)
+    .catch(() => path.normalize(project.canonicalPath));
+  const budget: ScanBudget = {
+    remaining: opts?.maxScanEntries ?? DEFAULT_LIMITS.maxContextScanEntries,
+  };
+
+  // canonical absolute path -> the pattern that first matched it
+  const matches = new Map<string, string>();
+
+  for (const pattern of patterns.filter((pat) => !hasMagic(pat))) {
+    const full = path.resolve(canonProject, pattern.split(path.posix.sep).join(path.sep));
+    const accepted = await acceptFile(full, canonProject, policy);
+    if (accepted && !matches.has(accepted)) matches.set(accepted, pattern);
   }
 
-  // Walk entire project tree (bounded) and filter by patterns
-  const visited = new Set<string>();
-  const allFiles = await walk(project.canonicalPath, project.canonicalPath, policy, visited);
+  const byPrefix = new Map<string, string[]>();
+  for (const pattern of patterns.filter(hasMagic)) {
+    const prefix = staticPrefix(pattern);
+    const group = byPrefix.get(prefix);
+    if (group) group.push(pattern);
+    else byPrefix.set(prefix, [pattern]);
+  }
+
+  for (const [prefix, group] of byPrefix) {
+    if (matches.size >= maxDocs) break;
+    const startDir = prefix
+      ? path.resolve(canonProject, prefix.split(path.posix.sep).join(path.sep))
+      : canonProject;
+    const visited = new Set<string>();
+    for await (const absPath of walkFiles(startDir, canonProject, policy, visited, budget)) {
+      if (matches.size >= maxDocs) break;
+      if (matches.has(absPath)) continue;
+      const relPosix = path.relative(canonProject, absPath).split(path.sep).join(path.posix.sep);
+      const matched = group.find((pattern) => minimatch(relPosix, pattern, { dot: true }));
+      if (matched) matches.set(absPath, matched);
+    }
+  }
 
   const summaries: ContextDocSummary[] = [];
-  const projectPosix = project.canonicalPath.split(path.sep).join(path.posix.sep);
-
-  for (const absPath of allFiles) {
-    // Compute relative posix path
-    const rel = path.relative(project.canonicalPath, absPath);
-    const relPosix = rel.split(path.sep).join(path.posix.sep);
-
-    // Check pattern match: patterns are relative globs like "TODO.md", "docs/**/*.md"
-    let matched: string | null = null;
-    for (const pat of project.contextPatterns) {
-      const patPosix = pat.split(path.sep).join(path.posix.sep);
-      // Match relative path OR basename for simple patterns
-      if (minimatch(relPosix, patPosix, { dot: true }) || minimatch(path.posix.basename(relPosix), patPosix, { dot: true })) {
-        matched = pat;
-        break;
-      }
-    }
-    if (!matched) continue;
-
-    // Stat
+  for (const [absPath, matched] of matches) {
     let stat: fs.Stats;
     try {
       stat = await fs.promises.stat(absPath);
@@ -168,7 +195,7 @@ export async function discoverContextDocuments(
     if (!stat.isFile()) continue;
 
     summaries.push({
-      path: relPosix,
+      path: path.relative(canonProject, absPath).split(path.sep).join(path.posix.sep),
       canonicalPath: absPath,
       sizeBytes: stat.size,
       modifiedAt: stat.mtime.toISOString(),

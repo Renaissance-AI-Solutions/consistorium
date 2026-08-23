@@ -1,8 +1,8 @@
 {
   "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
   "name": "context-bridge",
-  "version": "0.1.0",
-  "description": "Vendor-neutral local task and handoff continuity with read-only repository observation via MCP",
+  "version": "0.3.0",
+  "description": "Local-first strategic context and agent continuity layer via MCP",
   "author": {
     "name": "Context Bridge Contributors",
     "url": "https://github.com/context-bridge/context-bridge"

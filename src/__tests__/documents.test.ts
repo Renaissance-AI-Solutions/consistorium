@@ -115,6 +115,47 @@ describe("documents provider", () => {
     await expect(readContextDocument(binaryProj, policy, "docs/binary.png")).rejects.toThrow(/Denied|Binary/);
   });
 
+  it("does not overflow the stack or scan the whole tree on a huge project", async () => {
+    // Regression: discovery used to walk every file in the project and then
+    // `results.push(...sub)`, which throws RangeError once a single directory
+    // holds more entries than V8 accepts as spread arguments.
+    const base = await mkdtemp();
+    try {
+      const bulk = path.join(base, "bulk");
+      await fs.promises.mkdir(bulk, { recursive: true });
+      for (let i = 0; i < 130_000; i++) {
+        await fs.promises.writeFile(path.join(bulk, `f${i}.txt`), "");
+      }
+      await fs.promises.writeFile(path.join(base, "TODO.md"), "todo content");
+      await fs.promises.mkdir(path.join(base, "docs"), { recursive: true });
+      await fs.promises.writeFile(path.join(base, "docs", "arch.md"), "# arch");
+
+      const real = await fs.promises.realpath(base);
+      const proj: ResolvedProject = {
+        name: "huge",
+        canonicalPath: real,
+        originalPath: base,
+        contextPatterns: ["TODO.md", "docs/**/*.md"],
+      };
+      const docs = await discoverContextDocuments(proj, new SecurityPolicy([real]));
+      const paths = docs.map((d) => d.path).sort();
+      expect(paths).toEqual(["TODO.md", "docs/arch.md"]);
+    } finally {
+      await cleanup(base);
+    }
+  }, 40_000);
+
+  it("resolves literal patterns without walking sibling directories", async () => {
+    const noise = path.join(repo, "vendor", "nested");
+    await fs.promises.mkdir(noise, { recursive: true });
+    await fs.promises.writeFile(path.join(noise, "TODO.md"), "vendored todo");
+    const docs = await discoverContextDocuments(project, policy);
+    const paths = docs.map((d) => d.path);
+    // "TODO.md" is a root-relative literal pattern, not a basename match.
+    expect(paths).toContain("TODO.md");
+    expect(paths).not.toContain("vendor/nested/TODO.md");
+  });
+
   it("handles repo with spaces in path", async () => {
     const base = await mkdtemp();
     const spaced = path.join(base, "my docs repo");

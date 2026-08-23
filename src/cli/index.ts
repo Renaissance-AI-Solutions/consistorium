@@ -7,9 +7,13 @@ import * as path from "node:path";
 import * as os from "node:os";
 import * as readline from "node:readline";
 import * as yaml from "yaml";
-import { loadConfigSync, resolveConfigSync, getDefaultConfigPaths } from "../core/config.js";
+import { loadConfigSync, resolveConfigSync, getDefaultConfigPaths, findConfigFile } from "../core/config.js";
+import { resolveStateDir } from "../core/continuity.js";
+import { bootstrap } from "../mcp/app.js";
+import { generateToken, startHttpServer, validateHttpOptions } from "../mcp/http.js";
+import { buildProjectBriefing } from "../core/briefing.js";
 
-const VERSION = "0.1.0";
+const VERSION = "0.3.0";
 
 function printHelp(): void {
   console.log(`
@@ -22,9 +26,20 @@ Commands:
   init                  Initialize a new configuration interactively or with flags
   config show           Show resolved configuration
   config validate       Validate configuration file
-  serve                 Start MCP stdio server (same as running without args via MCP)
+  serve                 Start MCP stdio server (default)
+  serve --http          Start ChatGPT-compatible Streamable HTTP on /mcp
+  doctor                Check config, state dir, and smoke a project briefing
+  token                 Generate a bearer token for the HTTP transport
   version               Print version
   help                  Show this help
+
+HTTP serve options:
+  --host <addr>         Bind address (default 127.0.0.1)
+  --port <n>            Port (default 8787)
+  --token <token>       Bearer token (or CONTEXT_BRIDGE_TOKEN)
+  --allow-anonymous     Loopback only: allow unauthenticated HTTP
+  --allow-writes        Expose task/handoff write tools on HTTP (off by default)
+  --allowed-host <h>    Extra Host header value (repeatable; required mindset for non-loopback)
 
 Init options:
   --path <dir>          Project path to allowlist (can be repeated)
@@ -42,9 +57,11 @@ Examples:
   context-bridge config validate --config ./context-bridge.yaml
 
 Environment:
-  CONTEXT_BRIDGE_CONFIG   Explicit config file path
-  CONTEXT_BRIDGE_STATE_DIR Explicit local task/handoff state directory (otherwise derived outside projects)
-  PLUGIN_DATA             Plugin data directory (overrides default config location)
+  CONTEXT_BRIDGE_CONFIG     Explicit config file path
+  CONTEXT_BRIDGE_STATE_DIR  Explicit local task/handoff state directory (otherwise derived outside projects)
+  CONTEXT_BRIDGE_TOKEN      Bearer token required by the HTTP transport
+  CONTEXT_BRIDGE_HTTP_WRITES=1  Same as --allow-writes
+  PLUGIN_DATA               Plugin data directory (overrides default config location)
 `.trim());
 }
 
@@ -135,7 +152,7 @@ async function cmdInit(argv: string[]): Promise<void> {
       projects.push({
         name: n,
         path: abs,
-        context: opts.contexts.length ? [...opts.contexts] : ["TODO.md", "ROADMAP.md", "docs/**/*.md", "reports/**/*.md"],
+        context: opts.contexts.length ? [...opts.contexts] : ["README.md", "DESIGN.md", "TODO.md", "ROADMAP.md", "docs/**/*.md", "reports/**/*.md"],
       });
     }
   } else if (opts.yes) {
@@ -150,7 +167,7 @@ async function cmdInit(argv: string[]): Promise<void> {
     projects.push({
       name: path.basename(abs),
       path: abs,
-      context: opts.contexts.length ? [...opts.contexts] : ["TODO.md", "ROADMAP.md", "docs/**/*.md"],
+      context: opts.contexts.length ? [...opts.contexts] : ["README.md", "DESIGN.md", "TODO.md", "ROADMAP.md", "docs/**/*.md"],
     });
   } else {
     // Interactive mode
@@ -198,7 +215,7 @@ async function cmdInit(argv: string[]): Promise<void> {
       // Context patterns
       const ctxInput = await prompt(
         "  Context-document globs (comma-separated)",
-        "TODO.md, ROADMAP.md, docs/**/*.md"
+        "README.md, DESIGN.md, TODO.md, ROADMAP.md, docs/**/*.md"
       );
       const ctxPatterns = ctxInput
         .split(",")
@@ -303,6 +320,108 @@ async function cmdConfigValidate(args: string[]): Promise<void> {
   }
 }
 
+function readFlag(args: string[], name: string): string | undefined {
+  const idx = args.indexOf(name);
+  if (idx >= 0 && args[idx + 1]) return args[idx + 1];
+  return undefined;
+}
+
+function readRepeatFlag(args: string[], name: string): string[] {
+  const values: string[] = [];
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === name && args[i + 1]) values.push(args[++i]!);
+  }
+  return values;
+}
+
+async function cmdServe(args: string[]): Promise<void> {
+  if (args.includes("--help") || args.includes("-h")) {
+    printHelp();
+    return;
+  }
+  const http = args.includes("--http");
+  if (!http) {
+    const { startStdioServer } = await import("../mcp/server.js");
+    await startStdioServer();
+    return;
+  }
+
+  const host = readFlag(args, "--host") ?? process.env.CONTEXT_BRIDGE_HTTP_HOST ?? "127.0.0.1";
+  const portRaw = readFlag(args, "--port") ?? process.env.CONTEXT_BRIDGE_HTTP_PORT ?? "8787";
+  const port = Number(portRaw);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    console.error(`Invalid --port: ${portRaw}`);
+    process.exit(1);
+  }
+  const token = readFlag(args, "--token");
+  const allowAnonymous = args.includes("--allow-anonymous");
+  const allowWrites = args.includes("--allow-writes");
+  const allowedHosts = readRepeatFlag(args, "--allowed-host");
+
+  try {
+    validateHttpOptions({ host, token, allowAnonymous });
+  } catch (e) {
+    console.error(`✗ ${(e as Error).message}`);
+    process.exit(1);
+  }
+
+  const started = await startHttpServer({
+    host,
+    port,
+    token,
+    allowAnonymous,
+    allowWrites,
+    allowedHosts,
+  });
+  console.error(`Listening at ${started.url}`);
+  console.error(`Health: ${started.url.replace(/\/mcp$/, "/healthz")}`);
+  if (started.token) console.error("Authorization: Bearer <token>");
+  if (!started.allowWrites) console.error("HTTP writes are disabled. Execution agents should use stdio.");
+}
+
+async function cmdDoctor(args: string[]): Promise<void> {
+  let configPath: string | undefined;
+  for (let i = 0; i < args.length; i++) {
+    if ((args[i] === "--config" || args[i] === "-c") && args[i + 1]) configPath = args[++i];
+  }
+  const explicit = configPath ?? process.env.CONTEXT_BRIDGE_CONFIG;
+  const found = explicit ?? findConfigFile();
+  if (!found) {
+    console.error("✗ No configuration found. Run: context-bridge init --path <repo> --yes");
+    console.error(`  Searched: ${getDefaultConfigPaths().join(", ")}`);
+    process.exit(1);
+  }
+
+  const { raw, filePath } = loadConfigSync(found);
+  const resolved = resolveConfigSync(raw, filePath);
+  const stateDir = resolveStateDir(resolved.configPath, resolved.projects);
+  console.log(`✓ Config: ${filePath}`);
+  console.log(`  Projects: ${resolved.projects.map((p) => `${p.name} → ${p.canonicalPath}`).join("; ") || "(none)"}`);
+  console.log(`  State dir: ${stateDir}`);
+  console.log(`  Context globs: ${resolved.projects.map((p) => `${p.name}[${p.contextPatterns.join(", ")}]`).join("; ")}`);
+  console.log(`  Stdio: node dist/mcp/server.js`);
+  console.log(`  HTTP:  context-bridge serve --http --port 8787`);
+
+  const runtime = bootstrap({ allowWrites: false, configPath: filePath });
+  if (runtime.noConfig || runtime.config.projects.length === 0) {
+    console.log("  Smoke: skipped (no projects)");
+    return;
+  }
+  for (const project of runtime.config.projects) {
+    try {
+      const briefing = await buildProjectBriefing(runtime.service, runtime.continuity, project.name);
+      console.log(`✓ Smoke briefing for ${project.name}`);
+      console.log(`  Live: ${briefing.live.branch ?? "(no branch)"} @ ${briefing.live.headShort ?? "n/a"} dirty=${briefing.live.isDirty}`);
+      console.log(`  Open tasks: ${briefing.continuity.openTasks.length}`);
+      console.log(`  Handoffs: ${briefing.continuity.latestHandoffs.length}`);
+      console.log(`  Recommended: ${briefing.recommendedFocus.rationale}`);
+    } catch (e) {
+      console.error(`✗ Smoke briefing failed for ${project.name}: ${(e as Error).message}`);
+      process.exit(1);
+    }
+  }
+}
+
 async function main(): Promise<void> {
   const [cmd, ...rest] = process.argv.slice(2);
 
@@ -330,8 +449,15 @@ async function main(): Promise<void> {
     return;
   }
   if (cmd === "serve") {
-    // Dynamic import to avoid circular issues
-    await import("../mcp/server.js");
+    await cmdServe(rest);
+    return;
+  }
+  if (cmd === "doctor") {
+    await cmdDoctor(rest);
+    return;
+  }
+  if (cmd === "token") {
+    console.log(generateToken());
     return;
   }
 

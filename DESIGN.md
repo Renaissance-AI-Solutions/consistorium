@@ -15,7 +15,8 @@ The differentiator is **observability, not control** — OpenTelemetry for agent
 - No agent orchestration (launch/terminate/send terminal command)
 - No worktree/mutation control plane
 - No Kanban board, scheduling, or generic task-management workflow
-- No web UI, auth/accounts, SaaS backend
+- No web UI, multi-tenant accounts, or SaaS backend
+- No public unauthenticated MCP endpoint (loopback Streamable HTTP + bearer is supported)
 - No embeddings/vector search in v0.1
 - No database in v0.1 (lightweight local state only)
 
@@ -35,9 +36,11 @@ Chosen for:
 ### 3.2 Three-layer stack
 
 ```
-MCP transport (src/mcp)
+MCP transports (stdio + Streamable HTTP) in src/mcp
       ↓
-ContextService + ContinuityStore (src/core) — THE PORTABLE CORE
+createMcpServer / dispatchTool (src/mcp/app.ts)
+      ↓
+ContextService + ContinuityStore + briefing (src/core) — THE PORTABLE CORE
       ↓
 Providers (git, docs, search) + Adapter interface (sessions) + Security/Config
       ↓
@@ -78,9 +81,11 @@ Every provider that can return variable-length data caps it:
 
 Callers see `truncated: true` and can decide whether to refine the query. This prevents model-context blow-up and DoS.
 
-### 3.7 Project snapshot as hero tool
+### 3.7 Project snapshot and strategic briefing
 
-Instead of requiring 20 tool calls to answer "what's going on?", `context.project_snapshot` aggregates branch, worktrees, recent commits, docs, and sessions in one structured call. Other tools exist for drilling down. The skill `project-state` directs the model to call `project_snapshot` first.
+`context_project_snapshot` aggregates live branch, worktrees, recent commits, docs, and sessions.
+
+`context_project_briefing` is the strategist hero tool: it adds open tasks, latest handoffs, blockers, recorded decisions, next actions, and short excerpts from allowlisted README/DESIGN/TODO-style docs. Every claim is labeled `live_observation` or `agent_record`. The skill `project-state` directs the model to call `project_briefing` first for “what next?” questions.
 
 ---
 
@@ -129,10 +134,10 @@ Key types:
 
 ## 5. MCP API
 
-The surface has 17 bounded tools (all `context.*`). The continuity tools intentionally separate compact list projections from detail retrieval:
+The surface has 18 bounded tools (all `context.*`). The continuity tools intentionally separate compact list projections from detail retrieval:
 
 ```
-list_projects, project_snapshot,
+list_projects, project_briefing, project_snapshot,
 list_worktrees, worktree_snapshot,
 recent_changes, compare,
 search,
@@ -188,8 +193,10 @@ src/
   adapters/
     session.ts            SessionAdapter interface + GenericSessionAdapter + Noop
   mcp/
-    server.ts             stdio transport, tool dispatch, no-config helpful errors
-    tools.ts              17 tool definitions (inputSchema)
+    app.ts                transport-agnostic bootstrap + dispatch + Server
+    server.ts             stdio entry
+    http.ts               Streamable HTTP (/mcp), loopback + bearer
+    tools.ts              18 tool definitions (inputSchema + annotations)
   cli/
     index.ts              init / config show / config validate / serve
 example-config.yaml       annotated starter config
@@ -235,7 +242,7 @@ If the published spec evolves, `plugin.json` / `mcp.json` are the only files tha
 
 ## 10. Future extensibility
 
-- **Streamable HTTP** — `ContextService` is transport-agnostic; add `src/mcp/http.ts` that constructs the same service and maps the same tool handlers to Streamable HTTP.
+- **Streamable HTTP** — shipped in `src/mcp/http.ts`; ChatGPT Developer mode + Secure MCP Tunnel is the supported private path. Public OAuth 2.1 is not shipped.
 - **Binary build** — `ContextService` + providers can be ported to Rust/Go; `plugin.json`/`mcp.json` packaging is unaffected.
 - **Additional adapters** — implement `SessionAdapter` for Codex `~/.codex/sessions`, Claude `~/.claude/`, etc., when storage formats are stable and opt-in.
 

@@ -52,7 +52,7 @@ Required outcome:
 2. The named project is the only new allowlisted root.
 3. `consistorium doctor` passes.
 4. Your MCP client is configured to launch `consistorium serve` with the resolved absolute config
-   path in `CONTEXT_BRIDGE_CONFIG`.
+   path in `CONSISTORIUM_CONFIG`.
 5. You prove the connection by calling `context_list_projects` and
    `context_project_briefing` through the MCP client, not merely by invoking the CLI.
 

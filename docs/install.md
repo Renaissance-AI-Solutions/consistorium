@@ -82,7 +82,7 @@ consistorium init --path ~/dev/my-project --yes \
   --context "docs/**/*.md"
 ```
 
-What this writes: `~/.config/context-bridge/config.yaml` (override location with `--output` or the `CONTEXT_BRIDGE_CONFIG` environment variable).
+What this writes: `~/.config/consistorium/config.yaml` (override location with `--output` or the `CONSISTORIUM_CONFIG` environment variable).
 
 Defaults if you omit `--context`: `README.md`, `DESIGN.md`, `TODO.md`, `ROADMAP.md`, `docs/**/*.md`. Globs are root-relative; secret-looking files (`.env`, keys, credentials) are always denied even if a glob would match them. See `example-config.yaml` in the repository for a fully commented configuration, including optional session-artifact patterns.
 
@@ -98,7 +98,7 @@ Doctor checks your config, state directory, and runs a live smoke briefing again
 
 ## 4. Connect your MCP client
 
-All stdio-based clients use the same shape: run command `consistorium` with argument `serve`, plus the `CONTEXT_BRIDGE_CONFIG` environment variable pointing at your config.
+All stdio-based clients use the same shape: run command `consistorium` with argument `serve`, plus the `CONSISTORIUM_CONFIG` environment variable pointing at your config.
 
 ### Claude Desktop
 
@@ -110,7 +110,7 @@ Edit `claude_desktop_config.json` (**Settings → Developer → Edit Config**; m
     "consistorium": {
       "command": "consistorium",
       "args": ["serve"],
-      "env": { "CONTEXT_BRIDGE_CONFIG": "~/.config/context-bridge/config.yaml" }
+      "env": { "CONSISTORIUM_CONFIG": "~/.config/consistorium/config.yaml" }
     }
   }
 }
@@ -122,7 +122,7 @@ Restart Claude Desktop afterward.
 
 ```bash
 claude mcp add consistorium \
-  --env CONTEXT_BRIDGE_CONFIG="$HOME/.config/context-bridge/config.yaml" \
+  --env CONSISTORIUM_CONFIG="$HOME/.config/consistorium/config.yaml" \
   -- consistorium serve
 ```
 
@@ -144,7 +144,7 @@ Add to `~/.codex/config.toml`:
 [mcp_servers.consistorium]
 command = "consistorium"
 args = ["serve"]
-env = { "CONTEXT_BRIDGE_CONFIG" = "~/.config/context-bridge/config.yaml" }
+env = { "CONSISTORIUM_CONFIG" = "~/.config/consistorium/config.yaml" }
 ```
 
 (Exact key names can vary by Codex version — see `codex --help` / OpenAI docs if your build differs.)
@@ -155,7 +155,7 @@ env = { "CONTEXT_BRIDGE_CONFIG" = "~/.config/context-bridge/config.yaml" }
 hermes mcp add consistorium \
   --command consistorium \
   --args serve \
-  --env CONTEXT_BRIDGE_CONFIG="$HOME/.config/context-bridge/config.yaml"
+  --env CONSISTORIUM_CONFIG="$HOME/.config/consistorium/config.yaml"
 ```
 
 ### Anything else (generic stdio MCP)
@@ -164,9 +164,9 @@ hermes mcp add consistorium \
 |---|---|
 | Command | `consistorium` |
 | Args | `serve` |
-| Env | `CONTEXT_BRIDGE_CONFIG=/path/to/config.yaml` |
+| Env | `CONSISTORIUM_CONFIG=/path/to/config.yaml` |
 
-If your client cannot expand `~`, use an absolute path (macOS/Linux: `/Users/you/.config/context-bridge/config.yaml`; Windows: `%USERPROFILE%\.config\context-bridge\config.yaml`).
+If your client cannot expand `~`, use an absolute path (macOS/Linux: `/Users/you/.config/consistorium/config.yaml`; Windows: `%USERPROFILE%\.config\consistorium\config.yaml`).
 
 ### ChatGPT
 
@@ -208,11 +208,14 @@ and prove the result with real context_list_projects and context_project_briefin
 
 | Env var | Purpose |
 |---|---|
-| `CONTEXT_BRIDGE_CONFIG` | Explicit config file path |
-| `CONTEXT_BRIDGE_STATE_DIR` | Task/handoff state directory (defaults outside all project roots) |
-| `CONTEXT_BRIDGE_TOKEN` | Bearer token for HTTP transport |
-| `CONTEXT_BRIDGE_HTTP_WRITES=1` | Enable write tools on HTTP transport (off by default) |
-| `CONTEXT_BRIDGE_HTTP_HOST` / `_PORT` | HTTP bind defaults (127.0.0.1 / 8787) |
+| `CONSISTORIUM_CONFIG` | Explicit config file path |
+| `CONSISTORIUM_STATE_DIR` | Task/handoff state directory (defaults outside all project roots) |
+| `CONSISTORIUM_TOKEN` | Bearer token for HTTP transport |
+| `CONSISTORIUM_HTTP_WRITES=1` | Enable write tools on HTTP transport (off by default) |
+| `CONSISTORIUM_HTTP_HOST` / `_PORT` | HTTP bind defaults (127.0.0.1 / 8787) |
+
+Upgrading from v0.3 or earlier? All pre-0.4 `CONTEXT_BRIDGE_*` variable names still work;
+`CONSISTORIUM_*` wins when both are set.
 
 CLI commands: `init`, `config show`, `config validate`, `serve [--read-only] [--http]`, `doctor`,
 `token`, `version`, `help`.
@@ -224,7 +227,7 @@ CLI commands: `init`, `config show`, `config validate`, `serve [--read-only] [--
 | npm returns `E404` for `consistorium` | The registry release is not live; use the source-install fallback in step 1 |
 | `consistorium: command not found` | npm global bin dir isn't on `PATH`. Run `npm config get prefix`, add `<prefix>/bin` (macOS/Linux), or use the absolute binary path |
 | `EACCES` during global install | Do not use `sudo`. Either use `npx`, or move your npm prefix (`npm config set prefix ~/.npm-global`) and add it to `PATH` |
-| Tools appear but say *no configuration* | Client didn't receive `CONTEXT_BRIDGE_CONFIG`; check the `env` block, then `consistorium config show` |
+| Tools appear but say *no configuration* | Client didn't receive `CONSISTORIUM_CONFIG`; check the `env` block, then `consistorium config show` |
 | `Project not found: X` | Tool argument must equal a `projects[].name` in the config exactly |
 | `Document not allowlisted` | Path doesn't match that project's `context` globs — widen deliberately with `--context`, or edit the config |
 | Briefing shows empty purpose/architecture | No matching documents discovered; check filenames/globs and that files aren't denylisted (secrets, binaries) |
@@ -238,7 +241,7 @@ Still stuck? [Open an issue](https://github.com/Renaissance-AI-Solutions/consist
 
 ```bash
 npm uninstall -g consistorium     # removes the server; config and records remain
-rm -rf ~/.config/context-bridge   # remove config (and its state/, if you kept them together)
+rm -rf ~/.config/consistorium ~/.config/context-bridge   # remove config (and its state/, if you kept them together)
 npm install -g consistorium       # upgrade = reinstall latest
 ```
 

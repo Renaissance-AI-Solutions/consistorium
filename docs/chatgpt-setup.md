@@ -31,7 +31,7 @@ consistorium doctor
 ```
 
 Do not continue until it lists the intended projects and every smoke briefing passes. The default
-config is `~/.config/context-bridge/config.yaml`; initialize it first if needed.
+config is `~/.config/consistorium/config.yaml`; initialize it first if needed.
 
 ## 2. Install the official tunnel client
 

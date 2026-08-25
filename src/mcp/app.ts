@@ -58,7 +58,10 @@ function emptyResolved(syntheticPath: string): ResolvedConfig {
 }
 
 export function bootstrap(options: BootstrapOptions = {}): BridgeRuntime {
-  const explicit = options.configPath ?? process.env.CONTEXT_BRIDGE_CONFIG;
+  const explicit =
+    options.configPath ??
+    process.env.CONSISTORIUM_CONFIG ??
+    process.env.CONTEXT_BRIDGE_CONFIG;
   const foundPath = explicit ? explicit : findConfigFile() ?? null;
 
   let resolved: ResolvedConfig;
@@ -67,7 +70,7 @@ export function bootstrap(options: BootstrapOptions = {}): BridgeRuntime {
   if (!foundPath) {
     const syntheticPath = process.env.PLUGIN_DATA
       ? `${process.env.PLUGIN_DATA}/config.yaml`
-      : `${process.cwd()}/context-bridge.yaml`;
+      : `${process.cwd()}/consistorium.yaml`;
     try {
       resolved = resolveConfigSync(
         { version: 1, projects: [] as { name: string; path: string; context: string[] }[], sessionArtifacts: { patterns: [] as string[] } } as unknown as import("../core/types.js").RawConfig,
@@ -83,7 +86,7 @@ export function bootstrap(options: BootstrapOptions = {}): BridgeRuntime {
   }
 
   const roots = resolved.projects.map((p) => p.canonicalPath).filter(Boolean);
-  const policy = new SecurityPolicy(roots.length ? roots : ["/tmp/context-bridge-empty"]);
+  const policy = new SecurityPolicy(roots.length ? roots : ["/tmp/consistorium-empty"]);
   const service = new ContextService(resolved, policy);
   const continuity = new ContinuityStore(resolved, options.stateDir ? { stateDir: options.stateDir } : undefined);
 
@@ -149,7 +152,7 @@ export function noConfigMessage(config: ResolvedConfig): string {
   return (
     `No Consistorium configuration found. ` +
     `Searched default locations and ${config.configPath}. ` +
-    `Run 'consistorium init' to create a configuration, or set CONTEXT_BRIDGE_CONFIG to the config path.`
+    `Run 'consistorium init' to create a configuration, or set CONSISTORIUM_CONFIG to the config path.`
   );
 }
 

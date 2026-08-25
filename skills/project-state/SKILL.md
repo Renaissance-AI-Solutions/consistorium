@@ -143,6 +143,6 @@ If you need to know what diverges between branches:
 
 ## Reference
 
-- Configuration: `~/.config/context-bridge/config.yaml` or `$PLUGIN_DATA/config.yaml` or `CONTEXT_BRIDGE_CONFIG`
+- Configuration: `~/.config/consistorium/config.yaml` or `$PLUGIN_DATA/config.yaml` or `CONSISTORIUM_CONFIG`
 - Security: see `THREAT_MODEL.md` and `SECURITY.md`
 - All tools return `provenance.observedAt` — include it when summarizing

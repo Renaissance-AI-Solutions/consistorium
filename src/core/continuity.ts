@@ -208,7 +208,15 @@ function defaultStateDir(configPath: string, projects: ResolvedProject[]): strin
     // this sibling location. Only select it when it already exists; new
     // installs use the portable XDG/home fallback below.
     fs.existsSync(legacySibling) ? legacySibling : undefined,
-    process.env.XDG_STATE_HOME ? path.join(process.env.XDG_STATE_HOME, "context-bridge") : undefined,
+    process.env.XDG_STATE_HOME
+      ? path.join(process.env.XDG_STATE_HOME, "consistorium")
+      : undefined,
+    path.join(os.homedir(), ".local", "state", "consistorium"),
+    path.join(os.homedir(), ".consistorium-state"),
+    // Pre-0.4 default locations, honored only when no newer location exists.
+    process.env.XDG_STATE_HOME
+      ? path.join(process.env.XDG_STATE_HOME, "context-bridge")
+      : undefined,
     path.join(os.homedir(), ".local", "state", "context-bridge"),
     path.join(os.homedir(), ".context-bridge-state"),
     path.join(os.tmpdir(), "context-bridge-state"),
@@ -224,13 +232,22 @@ function defaultStateDir(configPath: string, projects: ResolvedProject[]): strin
   return candidate;
 }
 
-export function resolveStateDir(configPath: string, projects: ResolvedProject[], explicit = process.env.CONTEXT_BRIDGE_STATE_DIR): string {
+export function resolveStateDir(
+  configPath: string,
+  projects: ResolvedProject[],
+  explicit =
+    process.env.CONSISTORIUM_STATE_DIR ?? process.env.CONTEXT_BRIDGE_STATE_DIR,
+): string {
   const raw = explicit?.trim();
   if (raw) {
-    if (raw === "." || raw === ".." || raw.includes("\0")) throw continuityError("INVALID_STATE_DIR", "CONTEXT_BRIDGE_STATE_DIR is unsafe");
+    if (raw === "." || raw === ".." || raw.includes("\0"))
+      throw continuityError("INVALID_STATE_DIR", "CONSISTORIUM_STATE_DIR is unsafe");
     const resolved = path.resolve(raw);
     if (resolved === path.parse(resolved).root || path.basename(resolved) === ".git") {
-      throw continuityError("INVALID_STATE_DIR", "CONTEXT_BRIDGE_STATE_DIR must name a dedicated non-root directory");
+      throw continuityError(
+        "INVALID_STATE_DIR",
+        "CONSISTORIUM_STATE_DIR must name a dedicated non-root directory",
+      );
     }
     return resolved;
   }

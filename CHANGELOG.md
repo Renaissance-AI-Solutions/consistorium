@@ -33,6 +33,13 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 - Documentation now uses a neutral "Project Context" example name for the ChatGPT developer-mode
   app instead of an internal product name.
 - User-facing log lines consistently use the `[consistorium]` prefix.
+- **Rename completed everywhere.** Configuration, environment variables, and default paths now
+  use the Consistorium name: `CONSISTORIUM_CONFIG`, `CONSISTORIUM_STATE_DIR`, `CONSISTORIUM_TOKEN`,
+  `CONSISTORIUM_HTTP_WRITES`, `CONSISTORIUM_HTTP_HOST`/`_PORT`, `~/.config/consistorium/`,
+  `~/.local/state/consistorium/`, `./consistorium.yaml`, and `.consistorium/` project folders.
+  All pre-0.4 `CONTEXT_BRIDGE_*` variable names and `context-bridge` locations remain supported
+  as automatic fallbacks; when both are set, `CONSISTORIUM_*` wins. Existing installs keep
+  working without changes.
 
 ## [0.3.0] — 2026-08-19
 

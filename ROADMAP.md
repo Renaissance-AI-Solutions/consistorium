@@ -2,10 +2,10 @@
 
 This roadmap separates **working now** from **designed for later**. Nothing listed under "Later" is claimed as shipped.
 
-## Working now (v0.3)
+## Working now (v0.4)
 
 - Agent Plugins v1.0 packaging: `plugin.json`, `mcp.json` (stdio), `skills/project-state/SKILL.md`
-- Configuration: YAML/JSON, XDG + `PLUGIN_DATA` + `CONTEXT_BRIDGE_CONFIG` resolution, `consistorium init` (interactive + flags), `config show` / `config validate`
+- Configuration: YAML/JSON, XDG + `PLUGIN_DATA` + `CONSISTORIUM_CONFIG` resolution, `consistorium init` (interactive + flags), `config show` / `config validate`
 - Security: explicit allowlist, `realpath` canonicalization, `..` traversal denial, symlink escape prevention, exact `.git` deny rule, secret-file denylist, binary skip, bounded outputs, hardened allowlisted `execFile` git, explicit unavailable states, and external-worktree boundaries
 - Providers: git (worktree discovery, dirty/staged/untracked, branch/HEAD/detached, ahead/behind, recent commits, diff stat, bounded diff, merge-base), documents (discovery + bounded read), search (bounded plain-text)
 - Context plane: `ContextService` plus `ContinuityStore` behind a transport-agnostic facade

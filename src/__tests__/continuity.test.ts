@@ -29,7 +29,7 @@ describe("durable continuity", () => {
     const repo = await createGitRepo();
     disposables.push(repo);
     const config = configFor(repo, repo);
-    const store = new ContinuityStore({ ...config, configPath: path.join(repo, "context-bridge.yaml") });
+    const store = new ContinuityStore({ ...config, configPath: path.join(repo, "consistorium.yaml") });
     expect(store.stateDir === repo || store.stateDir.startsWith(`${repo}${path.sep}`)).toBe(false);
     expect(path.parse(store.stateDir).root).not.toBe(store.stateDir);
   });
@@ -39,7 +39,7 @@ describe("durable continuity", () => {
     disposables.push(repo);
     const config = configFor(repo, repo);
     const filesystemRoot = path.parse(repo).root;
-    const store = new ContinuityStore({ ...config, configPath: path.join(filesystemRoot, "context-bridge.yaml") });
+    const store = new ContinuityStore({ ...config, configPath: path.join(filesystemRoot, "consistorium.yaml") });
     expect(store.stateDir === repo || store.stateDir.startsWith(`${repo}${path.sep}`)).toBe(false);
     expect(store.stateDir).not.toBe(filesystemRoot);
   });
@@ -52,7 +52,7 @@ describe("durable continuity", () => {
     await fs.promises.mkdir(repo);
     await fs.promises.mkdir(legacyState);
     const config = configFor(repo, repo);
-    const store = new ContinuityStore({ ...config, configPath: path.join(repo, "context-bridge.yaml") });
+    const store = new ContinuityStore({ ...config, configPath: path.join(repo, "consistorium.yaml") });
     expect(store.stateDir).toBe(legacyState);
   });
 

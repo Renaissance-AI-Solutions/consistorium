@@ -25,7 +25,7 @@ async function main(options: StdioServerOptions = {}) {
 
 const invokedAsStdioEntry =
   Boolean(process.argv[1]) && import.meta.url === pathToFileURL(process.argv[1]!).href;
-if (invokedAsStdioEntry || process.env.CONTEXT_BRIDGE_FORCE_STDIO === "1") {
+if (invokedAsStdioEntry || process.env.CONSISTORIUM_FORCE_STDIO === "1" || process.env.CONTEXT_BRIDGE_FORCE_STDIO === "1") {
   main().catch((e) => {
     console.error("[consistorium] Fatal:", e);
     process.exit(1);

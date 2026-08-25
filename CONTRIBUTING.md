@@ -1,4 +1,4 @@
-# Contributing to Context Bridge
+# Contributing to Consistorium
 
 Thanks for helping build a local-first continuity and bounded observation layer for agentic development.
 
@@ -27,9 +27,9 @@ After `npm run build`, connect any MCP client using the portable form documented
 ```bash
 hermes mcp add consistorium \
   --command node \
-  --args /portable/path/context-bridge/dist/mcp/server.js \
-  --env CONTEXT_BRIDGE_CONFIG=/portable/path/context-bridge-config.yaml \
-  --env CONTEXT_BRIDGE_STATE_DIR=/portable/path/context-bridge-state
+  --args /portable/path/consistorium/dist/mcp/server.js \
+  --env CONSISTORIUM_CONFIG=/portable/path/consistorium-config.yaml \
+  --env CONSISTORIUM_STATE_DIR=/portable/path/consistorium-state
 ```
 
 After `npm run build`, `node dist/cli/index.js doctor` should smoke the configured briefing. The continuity path is `context_task_upsert` / `context_handoff_create` on stdio, then a fresh client reconstructs via `context_project_briefing`. Confirm handoff `repositoryState.canonical` is live and assertions never replace it.

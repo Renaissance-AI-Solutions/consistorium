@@ -56,9 +56,9 @@ Bounded local JSON state (tasks + handoffs; no generic file API)
 Alternatives considered:
 
 - **Auto-discover repos under `$HOME`** — rejected: too permissive, violates least privilege.
-- **`CONTEXT_BRIDGE_CONFIG` env only** — kept as override, but discoverability matters for plugin installs (`PLUGIN_DATA`).
+- **`CONSISTORIUM_CONFIG` env only** — kept as override, but discoverability matters for plugin installs (`PLUGIN_DATA`).
 
-Chose: **explicit `projects[].path` in YAML/JSON config** resolved with canonical realpath checks, with CLI `init` that forces the user to approve each root. Defaults are secure (no project → no repository access). Search order prefers `$CONTEXT_BRIDGE_CONFIG`, `$PLUGIN_DATA`, and XDG so plugin installs don't pollute `cwd`. Configured project names use the same portable safe-identifier contract as task and handoff IDs. Continuity state is derived from `CONTEXT_BRIDGE_STATE_DIR` or an unprivileged XDG/home/temp location outside configured project roots.
+Chose: **explicit `projects[].path` in YAML/JSON config** resolved with canonical realpath checks, with CLI `init` that forces the user to approve each root. Defaults are secure (no project → no repository access). Search order prefers `$CONSISTORIUM_CONFIG`, `$PLUGIN_DATA`, and XDG so plugin installs don't pollute `cwd`. Configured project names use the same portable safe-identifier contract as task and handoff IDs. Continuity state is derived from `CONSISTORIUM_STATE_DIR` or an unprivileged XDG/home/temp location outside configured project roots.
 
 ### 3.4 Security as policy object
 
@@ -102,7 +102,7 @@ Handoff repository state is deliberately split:
 
 ```text
 repositoryState:
-  canonical:       # live observation captured by Context Bridge
+  canonical:       # live observation captured by Consistorium
   assertion:       # optional agent-reported branch/HEAD/dirty facts
   mismatches: []   # explicit assertion-vs-canonical differences
   refreshed: ...   # get detail only; current live observation
@@ -213,7 +213,7 @@ Status (2026-08-11): **conformant**.
 - `mcp.json` validates against `https://agent-plugins.org/schemas/1.0.0/mcp.schema.json` — `mcpServers` with `type: "stdio"`, `command: "node"`, `args: ["./dist/mcp/server.js"]`, and `cwd: "${PLUGIN_ROOT}"`. No `PLUGIN_ROOT`/`PLUGIN_DATA` in `env` keys. `args`/`env`/`cwd` expansion is host-handled.
 - Skills at fixed `skills/*/SKILL.md` (no recursion).
 - No `plugin.json` inline `mcpServers`; no alternative component discovery.
-- `PLUGIN_ROOT` / `PLUGIN_DATA` semantics (spec §9) are left to the hosting client — the server reads `CONTEXT_BRIDGE_CONFIG`, `PLUGIN_DATA`, and XDG in that order, which is compatible.
+- `PLUGIN_ROOT` / `PLUGIN_DATA` semantics (spec §9) are left to the hosting client — the server reads `CONSISTORIUM_CONFIG`, `PLUGIN_DATA`, and XDG in that order, which is compatible.
 
 Discrepancy log:
 

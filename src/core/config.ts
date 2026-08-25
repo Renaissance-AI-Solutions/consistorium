@@ -3,11 +3,12 @@
  * Supports YAML and JSON configs.
  *
  * Search order for config file (when no explicit path):
- * 1. $CONTEXT_BRIDGE_CONFIG env var
+ * 1. $CONSISTORIUM_CONFIG env var (pre-0.4 alias $CONTEXT_BRIDGE_CONFIG still honored)
  * 2. $PLUGIN_DATA/config.yaml  (when PLUGIN_DATA is set)
- * 3. $XDG_CONFIG_HOME/context-bridge/config.yaml  or ~/.config/context-bridge/config.yaml
- * 4. ./.context-bridge.yaml in cwd
- * 5. ./context-bridge.yaml in cwd
+ * 3. $XDG_CONFIG_HOME/consistorium/config.yaml  or ~/.config/consistorium/config.yaml
+ *    (pre-0.4 installs' ~/.config/context-bridge/ remains a fallback)
+ * 4. ./.consistorium.yaml in cwd (legacy ./context-bridge.yaml names also probed)
+ * 5. ./consistorium.yaml in cwd
  *
  * For MCP stdio, the host may pass config via env/context.
  */
@@ -67,8 +68,11 @@ function assertProjectName(name: string): void {
 export function getDefaultConfigPaths(): string[] {
   const candidates: string[] = [];
 
-  if (process.env.CONTEXT_BRIDGE_CONFIG) {
-    candidates.push(process.env.CONTEXT_BRIDGE_CONFIG);
+  // Pre-0.4 installs used the CONTEXT_BRIDGE_* names; both work, new name wins.
+  const envConfig =
+    process.env.CONSISTORIUM_CONFIG ?? process.env.CONTEXT_BRIDGE_CONFIG;
+  if (envConfig) {
+    candidates.push(envConfig);
   }
 
   const pluginData = process.env.PLUGIN_DATA;
@@ -78,16 +82,30 @@ export function getDefaultConfigPaths(): string[] {
   }
 
   const xdg = process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config");
-  candidates.push(path.join(xdg, "context-bridge", "config.yaml"));
-  candidates.push(path.join(xdg, "context-bridge", "config.json"));
-  candidates.push(path.join(xdg, "context-bridge", "config.yml"));
+  for (const ext of ["yaml", "json", "yml"]) {
+    candidates.push(path.join(xdg, "consistorium", `config.${ext}`));
+  }
+  // Legacy v0.1-v0.3 default location, honored only when nothing newer exists.
+  for (const ext of ["yaml", "json", "yml"]) {
+    candidates.push(path.join(xdg, "context-bridge", `config.${ext}`));
+  }
 
-  candidates.push(path.join(process.cwd(), ".context-bridge.yaml"));
-  candidates.push(path.join(process.cwd(), ".context-bridge.yml"));
-  candidates.push(path.join(process.cwd(), "context-bridge.yaml"));
-  candidates.push(path.join(process.cwd(), "context-bridge.yml"));
-  candidates.push(path.join(process.cwd(), ".context-bridge.json"));
-  candidates.push(path.join(process.cwd(), "context-bridge.json"));
+  for (const base of [
+    ".consistorium.yaml",
+    ".consistorium.yml",
+    "consistorium.yaml",
+    "consistorium.yml",
+    ".consistorium.json",
+    "consistorium.json",
+    ".context-bridge.yaml",
+    ".context-bridge.yml",
+    "context-bridge.yaml",
+    "context-bridge.yml",
+    ".context-bridge.json",
+    "context-bridge.json",
+  ]) {
+    candidates.push(path.join(process.cwd(), base));
+  }
 
   return candidates;
 }

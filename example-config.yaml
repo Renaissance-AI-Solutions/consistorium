@@ -1,8 +1,8 @@
 # Consistorium example configuration
-# Copy to ~/.config/context-bridge/config.yaml or set CONTEXT_BRIDGE_CONFIG
+# Copy to ~/.config/consistorium/config.yaml or set CONSISTORIUM_CONFIG
 # Only allowlisted projects are inspected — nothing else is accessible.
 # Structured tasks/handoffs are stored outside these roots by default. Set
-# CONTEXT_BRIDGE_STATE_DIR explicitly when a different local state location is
+# CONSISTORIUM_STATE_DIR explicitly when a different local state location is
 # required; there is no generic file-write MCP tool.
 
 version: 1
@@ -19,7 +19,7 @@ projects:
       - ROADMAP.md
       - docs/**/*.md
       - reports/**/*.md
-      - .context-bridge/**/*.md
+      - .consistorium/**/*.md
 
   # Add more projects as needed:
   # - name: another-service
@@ -34,7 +34,7 @@ projects:
 sessionArtifacts:
   patterns:
     - reports/**/*.md
-    - .context-bridge/sessions/**/*.json
+    - .consistorium/sessions/**/*.json
     - sessions/**/*.md
 
 # Optional limits (defaults shown)

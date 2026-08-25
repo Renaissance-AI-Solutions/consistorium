@@ -96,7 +96,11 @@ function sendJson(res: http.ServerResponse, status: number, body: unknown, extra
 export function validateHttpOptions(opts: HttpListenOptions): { host: string; allowAnonymous: boolean; token?: string } {
   const host = opts.host ?? "127.0.0.1";
   const allowAnonymous = opts.allowAnonymous === true;
-  const token = opts.token?.trim() || process.env.CONTEXT_BRIDGE_TOKEN?.trim() || undefined;
+  const token =
+    opts.token?.trim() ||
+    process.env.CONSISTORIUM_TOKEN?.trim() ||
+    process.env.CONTEXT_BRIDGE_TOKEN?.trim() ||
+    undefined;
 
   if (!isLoopbackHost(host) && allowAnonymous) {
     throw Object.assign(new Error("Refusing --allow-anonymous on a non-loopback bind. Use a bearer token."), {
@@ -104,7 +108,7 @@ export function validateHttpOptions(opts: HttpListenOptions): { host: string; al
     });
   }
   if (!isLoopbackHost(host) && !token) {
-    throw Object.assign(new Error("Refusing to listen on a non-loopback address without CONTEXT_BRIDGE_TOKEN / --token."), {
+    throw Object.assign(new Error("Refusing to listen on a non-loopback address without CONSISTORIUM_TOKEN / --token."), {
       code: "INSECURE_BIND",
     });
   }
@@ -115,7 +119,10 @@ export async function startHttpServer(opts: HttpListenOptions = {}): Promise<Sta
   const { host, allowAnonymous, token: configuredToken } = validateHttpOptions(opts);
   const port = opts.port ?? 8787;
   const token = configuredToken ?? (allowAnonymous ? undefined : generateToken());
-  const allowWrites = opts.allowWrites === true || process.env.CONTEXT_BRIDGE_HTTP_WRITES === "1";
+  const allowWrites =
+    opts.allowWrites === true ||
+    process.env.CONSISTORIUM_HTTP_WRITES === "1" ||
+    process.env.CONTEXT_BRIDGE_HTTP_WRITES === "1";
   const runtime = opts.runtime ?? bootstrap({ allowWrites });
   runtime.allowWrites = allowWrites;
 
@@ -218,8 +225,8 @@ export async function startHttpServer(opts: HttpListenOptions = {}): Promise<Sta
   console.error(
     `[consistorium] Streamable HTTP on ${url} (bind=${host} writes=${allowWrites ? "on" : "off"} auth=${token ? "bearer" : "anonymous-loopback"})`
   );
-  if (token && !configuredToken && !process.env.CONTEXT_BRIDGE_TOKEN) {
-    console.error(`[context-bridge] Generated bearer token (set CONTEXT_BRIDGE_TOKEN to pin it): ${token}`);
+  if (token && !configuredToken && !process.env.CONSISTORIUM_TOKEN && !process.env.CONTEXT_BRIDGE_TOKEN) {
+    console.error(`[consistorium] Generated bearer token (set CONSISTORIUM_TOKEN to pin it): ${token}`);
   }
 
   return {

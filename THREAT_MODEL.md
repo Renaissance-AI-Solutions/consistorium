@@ -40,7 +40,7 @@ Consistorium sits between **an AI agent (MCP client)** and **the developer's loc
 Assumptions:
 
 - The OS, Node.js, and `git` binary are trusted.
-- The user who runs `context-bridge init` is trusted to choose allowlisted roots.
+- The user who runs `consistorium init` is trusted to choose allowlisted roots.
 - MCP stdio is authenticated by the local client that spawned the process. Streamable HTTP requires a bearer token unless anonymous loopback is explicitly enabled.
 
 ## 5. Threats & mitigations
@@ -66,7 +66,7 @@ Assumptions:
 
 - Only six structured `context.task_*`/`context.handoff_*` operations exist. There is no generic path or file-write tool.
 - IDs are strict safe identifiers; storage filenames are hashes, and records are capped at 256 KiB with bounded strings/arrays.
-- Default state is derived from `CONTEXT_BRIDGE_STATE_DIR` or config location and is relocated outside configured project roots when the config itself lives in a project. An in-project state path requires explicit `CONTEXT_BRIDGE_STATE_DIR`.
+- Default state is derived from `CONSISTORIUM_STATE_DIR` or config location and is relocated outside configured project roots when the config itself lives in a project. An in-project state path requires explicit `CONSISTORIUM_STATE_DIR`.
 - Writes use a same-directory exclusive temp file, `fsync`, restrictive modes (`0700` directories, `0600` records), and rename.
 - Lists return compact summaries. Full objective/transcript-like content is never injected by list calls.
 
@@ -161,8 +161,8 @@ Assumptions:
 
 **Mitigations**:
 
-- Config is **not writable** via MCP tools. There is no `context.add_project` tool. `context-bridge init` is a CLI command requiring local shell access.
-- Config lives at `PLUGIN_DATA` or `~/.config/context-bridge/` — not inside inspected repos by default. Writing to inspected repos is not done unless the user explicitly runs `init --output /path/inside/repo`.
+- Config is **not writable** via MCP tools. There is no `context.add_project` tool. `consistorium init` is a CLI command requiring local shell access.
+- Config lives at `PLUGIN_DATA` or `~/.config/consistorium/` (pre-0.4 installs: `~/.config/context-bridge/`) — not inside inspected repos by default. Writing to inspected repos is not done unless the user explicitly runs `init --output /path/inside/repo`.
 - `resolveConfigSync` canonicalizes project paths and checks existence; duplicate project names are rejected.
 
 ### 5.8 Network egress / telemetry

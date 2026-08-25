@@ -45,7 +45,7 @@ Point any stdio MCP client at it:
     "consistorium": {
       "command": "consistorium",
       "args": ["serve"],
-      "env": { "CONTEXT_BRIDGE_CONFIG": "~/.config/context-bridge/config.yaml" }
+      "env": { "CONSISTORIUM_CONFIG": "~/.config/consistorium/config.yaml" }
     }
   }
 }
@@ -126,7 +126,7 @@ Use the JSON snippet above. After editing, restart the client.
 hermes mcp add consistorium \
   --command consistorium \
   --args serve \
-  --env CONTEXT_BRIDGE_CONFIG=$HOME/.config/context-bridge/config.yaml
+  --env CONSISTORIUM_CONFIG=$HOME/.config/consistorium/config.yaml
 ```
 
 ### ChatGPT
@@ -153,10 +153,15 @@ listing; that would require a separate hosted HTTPS service and per-user authent
 
 | Variable | Purpose |
 |---|---|
-| `CONTEXT_BRIDGE_CONFIG` | Config file path |
-| `CONTEXT_BRIDGE_STATE_DIR` | Task/handoff state directory (kept outside project roots by default) |
-| `CONTEXT_BRIDGE_TOKEN` | Bearer token for Streamable HTTP |
-| `CONTEXT_BRIDGE_HTTP_WRITES=1` | Allow task/handoff writes on HTTP (off by default) |
+| `CONSISTORIUM_CONFIG` | Config file path |
+| `CONSISTORIUM_STATE_DIR` | Task/handoff state directory (kept outside project roots by default) |
+| `CONSISTORIUM_TOKEN` | Bearer token for Streamable HTTP |
+| `CONSISTORIUM_HTTP_WRITES=1` | Allow task/handoff writes on HTTP (off by default) |
+
+Upgrading from v0.3 or earlier? The pre-0.4 `CONTEXT_BRIDGE_*` variable names and the
+`~/.config/context-bridge/`, `~/.local/state/context-bridge/`, and `./context-bridge.yaml`
+locations are still honored automatically — nothing breaks, and `consistorium init` writes to
+the new defaults from now on.
 
 Records are written `0600` under a `0700` state directory; filenames are hashes, IDs never become paths.
 

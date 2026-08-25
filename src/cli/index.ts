@@ -37,7 +37,7 @@ Commands:
 HTTP serve options:
   --host <addr>         Bind address (default 127.0.0.1)
   --port <n>            Port (default 8787)
-  --token <token>       Bearer token (or CONTEXT_BRIDGE_TOKEN)
+  --token <token>       Bearer token (or CONSISTORIUM_TOKEN)
   --allow-anonymous     Loopback only: allow unauthenticated HTTP
   --allow-writes        Expose task/handoff write tools on HTTP (off by default)
   --allowed-host <h>    Extra Host header value (repeatable; required mindset for non-loopback)
@@ -45,7 +45,7 @@ HTTP serve options:
 Init options:
   --path <dir>          Project path to allowlist (can be repeated)
   --name <name>         Project name (paired with --path; defaults to directory basename)
-  --output <file>       Config output path (default: ~/.config/context-bridge/config.yaml)
+  --output <file>       Config output path (default: ~/.config/consistorium/config.yaml)
   --context <glob>      Context-document glob (can be repeated)
   --session <glob>      Session-artifact glob (can be repeated)
   --yes                 Non-interactive, use defaults where possible
@@ -55,14 +55,14 @@ Examples:
   consistorium init
   consistorium init --path ~/dev/my-project --context "TODO.md" --context "docs/**/*.md"
   consistorium config show
-  consistorium config validate --config ./context-bridge.yaml
+  consistorium config validate --config ./consistorium.yaml
 
 Environment:
-  CONTEXT_BRIDGE_CONFIG     Explicit config file path
-  CONTEXT_BRIDGE_STATE_DIR  Explicit local task/handoff state directory (otherwise derived outside projects)
-  CONTEXT_BRIDGE_TOKEN      Bearer token required by the HTTP transport
-  CONTEXT_BRIDGE_HTTP_WRITES=1  Same as --allow-writes
-  PLUGIN_DATA               Plugin data directory (overrides default config location)
+  CONSISTORIUM_CONFIG        Explicit config file path (pre-0.4 CONTEXT_BRIDGE_CONFIG still honored)
+  CONSISTORIUM_STATE_DIR     Explicit local task/handoff state directory (otherwise derived outside projects)
+  CONSISTORIUM_TOKEN         Bearer token required by the HTTP transport (pre-0.4 name still honored)
+  CONSISTORIUM_HTTP_WRITES=1 Same as --allow-writes
+  PLUGIN_DATA                Plugin data directory (overrides default config location)
 `.trim());
 }
 
@@ -82,7 +82,7 @@ function getDefaultConfigPath(): string {
     return path.join(process.env.PLUGIN_DATA, "config.yaml");
   }
   const xdg = process.env.XDG_CONFIG_HOME || path.join(os.homedir(), ".config");
-  return path.join(xdg, "context-bridge", "config.yaml");
+  return path.join(xdg, "consistorium", "config.yaml");
 }
 
 function parseInitArgs(argv: string[]): {
@@ -297,7 +297,10 @@ async function cmdConfigShow(args: string[]): Promise<void> {
   for (let i = 0; i < args.length; i++) {
     if ((args[i] === "--config" || args[i] === "-c") && args[i + 1]) configPath = args[++i];
   }
-  const explicit = configPath ?? process.env.CONTEXT_BRIDGE_CONFIG;
+  const explicit =
+    configPath ??
+    process.env.CONSISTORIUM_CONFIG ??
+    process.env.CONTEXT_BRIDGE_CONFIG;
   const { raw, filePath } = loadConfigSync(explicit);
   const resolved = resolveConfigSync(raw, filePath);
   console.log(yaml.stringify(resolved, { indent: 2 }));
@@ -308,7 +311,10 @@ async function cmdConfigValidate(args: string[]): Promise<void> {
   for (let i = 0; i < args.length; i++) {
     if ((args[i] === "--config" || args[i] === "-c") && args[i + 1]) configPath = args[++i];
   }
-  const explicit = configPath ?? process.env.CONTEXT_BRIDGE_CONFIG;
+  const explicit =
+    configPath ??
+    process.env.CONSISTORIUM_CONFIG ??
+    process.env.CONTEXT_BRIDGE_CONFIG;
   try {
     const { raw, filePath } = loadConfigSync(explicit);
     const resolved = resolveConfigSync(raw, filePath);
@@ -347,8 +353,16 @@ async function cmdServe(args: string[]): Promise<void> {
     return;
   }
 
-  const host = readFlag(args, "--host") ?? process.env.CONTEXT_BRIDGE_HTTP_HOST ?? "127.0.0.1";
-  const portRaw = readFlag(args, "--port") ?? process.env.CONTEXT_BRIDGE_HTTP_PORT ?? "8787";
+  const host =
+    readFlag(args, "--host") ??
+    process.env.CONSISTORIUM_HTTP_HOST ??
+    process.env.CONTEXT_BRIDGE_HTTP_HOST ??
+    "127.0.0.1";
+  const portRaw =
+    readFlag(args, "--port") ??
+    process.env.CONSISTORIUM_HTTP_PORT ??
+    process.env.CONTEXT_BRIDGE_HTTP_PORT ??
+    "8787";
   const port = Number(portRaw);
   if (!Number.isInteger(port) || port < 1 || port > 65535) {
     console.error(`Invalid --port: ${portRaw}`);
@@ -385,7 +399,10 @@ async function cmdDoctor(args: string[]): Promise<void> {
   for (let i = 0; i < args.length; i++) {
     if ((args[i] === "--config" || args[i] === "-c") && args[i + 1]) configPath = args[++i];
   }
-  const explicit = configPath ?? process.env.CONTEXT_BRIDGE_CONFIG;
+  const explicit =
+    configPath ??
+    process.env.CONSISTORIUM_CONFIG ??
+    process.env.CONTEXT_BRIDGE_CONFIG;
   const found = explicit ?? findConfigFile();
   if (!found) {
     console.error("✗ No configuration found. Run: consistorium init --path <repo> --yes");

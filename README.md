@@ -33,6 +33,9 @@ consistorium init --path ~/dev/my-project --name my-project --yes
 consistorium doctor        # verifies config + smokes a live briefing
 ```
 
+`init` prints a ready-to-paste `mcpServers` snippet (with your absolute config path) and the
+one-line `claude mcp add` equivalent — copy whichever matches your client, restart it, done.
+
 If npm returns `E404` before the first registry release, use the source-install fallback in
 [docs/install.md](docs/install.md). Do not confuse `npm install` inside a checkout (dependencies
 only) with `npm install -g .` (installs the CLI).
@@ -54,10 +57,11 @@ Point any stdio MCP client at it:
 Works with Claude Desktop, Claude Code, Codex, Cursor, Windsurf, Hermes, and any other MCP-compatible client. For **ChatGPT** (which connects over the network rather than stdio), see [docs/chatgpt-setup.md](docs/chatgpt-setup.md). Full walkthrough for every client, troubleshooting, and uninstall: **[docs/install.md](docs/install.md)**.
 
 Want an agent to do it? Give a coding agent the appropriate copy-paste handoff in
-**[docs/agent-install.md](docs/agent-install.md)**. It installs, preserves existing configuration,
-registers the MCP server, and must prove success with a real tool call. For ChatGPT, the only
-unavoidable human actions are approving the restricted OpenAI runtime key, copying it to the local
-clipboard, and—when browser policy requires it—pressing **Send** on the staged verification prompt.
+**[docs/agent-install.md](docs/agent-install.md)** — or the one-liner above. It installs, preserves
+existing configuration, registers the MCP server, and must prove success with a real tool call. For
+ChatGPT, the only unavoidable human actions are approving the restricted OpenAI runtime key,
+copying it to the local clipboard, and—when browser policy requires it—pressing **Send** on the
+staged verification prompt.
 
 Then ask your client:
 

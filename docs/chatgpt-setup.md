@@ -14,6 +14,23 @@ For a coding agent to perform the setup, give it **Prompt B** in
 key, copy it to the local clipboard, and—if browser policy requires it—press **Send** on a staged
 verification message.
 
+## The whole setup at a glance
+
+Five steps, in order. Do not skip ahead — each step depends on the previous one passing.
+
+1. **Verify Consistorium locally** — `consistorium doctor` passes.
+2. **Install `tunnel-client`** — official OpenAI release, checksum-verified, on `PATH`.
+3. **Get the two OpenAI values** — a `tunnel_...` ID (not secret) and a restricted runtime API key
+   with **Tunnels: Read + Use** (secret — clipboard straight into a 0600 key file, never into chat).
+4. **Connect one managed read-only runtime** — `tunnel-client runtimes connect ... --mcp-command
+   "<consistorium path> serve --read-only"`, then confirm status shows running + healthy + ready.
+5. **Attach Project Context in ChatGPT** — Developer mode → create/refresh the Tunnel app → attach
+   in a *new* chat → send the verification prompt and see real project names returned.
+
+You are done when ChatGPT itself returns your project names from `context_list_projects`. Anything
+less (a healthy process, an HTTP 200, a visible card) is not proof. Detailed instructions for each
+step follow; come back to this list to check where you are.
+
 ## Before starting: understand the two values
 
 | Value | What it is | Secret? |

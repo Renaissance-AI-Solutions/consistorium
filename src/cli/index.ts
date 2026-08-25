@@ -30,6 +30,8 @@ Commands:
   serve --read-only     Start MCP stdio without task/handoff write tools
   serve --http          Start ChatGPT-compatible Streamable HTTP on /mcp
   doctor                Check config, state dir, and smoke a project briefing
+  mcp-snippet           Print a ready-to-paste MCP registration for a client
+  autostart             Install/remove a per-user launcher for the tunnel runtime
   token                 Generate a bearer token for the HTTP transport
   version               Print version
   help                  Show this help
@@ -56,6 +58,10 @@ Examples:
   consistorium init --path ~/dev/my-project --context "TODO.md" --context "docs/**/*.md"
   consistorium config show
   consistorium config validate --config ./consistorium.yaml
+  consistorium mcp-snippet --client claude-code
+  consistorium mcp-snippet --client cursor --config ~/.config/consistorium/config.yaml
+  consistorium autostart install --alias consistorium   # keep the ChatGPT tunnel runtime alive across reboots
+  consistorium autostart remove --alias consistorium
 
 Environment:
   CONSISTORIUM_CONFIG        Explicit config file path (pre-0.4 CONTEXT_BRIDGE_CONFIG still honored)
@@ -286,10 +292,20 @@ async function cmdInit(argv: string[]): Promise<void> {
   console.log(`\n✓ Configuration written to ${outputPath}`);
   console.log(`  Projects: ${projects.map((p) => p.name).join(", ")}`);
   if (opts.sessions.length > 0) console.log(`  Session patterns: ${opts.sessions.join(", ")}`);
-  console.log(`\nNext steps:`);
-  console.log(`  - Review: cat ${outputPath}`);
-  console.log(`  - Validate: consistorium config validate --config ${outputPath}`);
-  console.log(`  - Start MCP server: consistorium serve (or configure your MCP client)`);
+  const absConfigPath = path.resolve(outputPath);
+  console.log(`
+Next steps:
+  - Verify: consistorium doctor
+  - Register your MCP client with this snippet (restart the client afterwards):
+
+${JSON.stringify({ mcpServers: { consistorium: buildServerEntry(resolveCliCommandPath(), ["serve"], absConfigPath) } }, null, 2)
+  .split("\n")
+  .map((l) => `    ${l}`)
+  .join("\n")}
+
+  Or generate a ready-to-run command for your specific client:
+    consistorium mcp-snippet --client claude-code   (also: cursor, windsurf, claude-desktop, codex, generic)
+`.trim());
 }
 
 async function cmdConfigShow(args: string[]): Promise<void> {
@@ -324,6 +340,275 @@ async function cmdConfigValidate(args: string[]): Promise<void> {
   } catch (e) {
     console.error(`✗ Config invalid: ${(e as Error).message}`);
     process.exit(1);
+  }
+}
+
+function readFlag(args: string[], name: string): string | undefined {
+  const idx = args.indexOf(name);
+  if (idx >= 0 && args[idx + 1]) return args[idx + 1];
+  return undefined;
+}
+
+/**
+ * Per-user autostart for the managed tunnel runtime (the ChatGPT path).
+ *
+ * The tunnel-client runtime must be running for ChatGPT discovery and every tool call, but it
+ * does not survive reboots on its own. `autostart install` writes a per-user launcher that
+ * runs the exact `runtimes connect` command at login. Nothing system-wide is touched and no
+ * key material appears in the launcher file — it references the existing 0600 key file.
+ */
+async function cmdAutostart(args: string[]): Promise<void> {
+  const action = args[0];
+  let alias = "consistorium";
+  let tunnelId: string | undefined;
+  let keyFile: string | undefined;
+  for (let i = 1; i < args.length; i++) {
+    if ((args[i] === "--alias" || args[i] === "-a") && args[i + 1]) alias = args[++i]!;
+    else if (args[i] === "--tunnel-id" && args[i + 1]) tunnelId = args[++i];
+    else if (args[i] === "--key-file" && args[i + 1]) keyFile = args[++i];
+  }
+
+  const isMac = process.platform === "darwin";
+  const isLinux = process.platform === "linux";
+  if (!isMac && !isLinux) {
+    console.error(`✗ autostart supports macOS (launchd) and Linux (systemd user units); got ${process.platform}.`);
+    console.error("  On Windows, create a Task Scheduler job that runs the same `runtimes connect` command.");
+    process.exit(1);
+  }
+  if (action !== "install" && action !== "remove") {
+    console.error("Usage: consistorium autostart <install|remove> [--alias consistorium] [--tunnel-id tunnel_...] [--key-file <path>]");
+    process.exit(1);
+  }
+
+  const bin = resolveCliCommandPath();
+  const resolvedKeyFile = keyFile ?? path.join(os.homedir(), ".config", "tunnel-client", "runtime-key");
+
+  // macOS launchd
+  if (isMac) {
+    const plistDir = path.join(os.homedir(), "Library", "LaunchAgents");
+    const label = `us.corpuslaw.consistorium-tunnel.${alias}`;
+    const plistPath = path.join(plistDir, `${label}.plist`);
+
+    if (action === "remove") {
+      try {
+        await fs.promises.unlink(plistPath);
+        console.log(`✓ Removed ${plistPath}`);
+        console.log(`  Run: launchctl bootout gui/$UID/${label} 2>/dev/null || true`);
+      } catch {
+        console.error(`✗ Not found: ${plistPath}`);
+        process.exit(1);
+      }
+      return;
+    }
+
+    // install
+    if (!tunnelId) {
+      console.error("✗ --tunnel-id tunnel_... is required for install (it is an identifier, not a secret).");
+      process.exit(1);
+    }
+    if (!fs.existsSync(resolvedKeyFile)) {
+      console.error(`✗ Runtime key file not found: ${resolvedKeyFile}`);
+      console.error("  Complete the key handoff in docs/chatgpt-setup.md first, or pass --key-file <path>.");
+      process.exit(1);
+    }
+    const connectCmd = [
+      bin,
+      "exec", // placeholder replaced below — see note
+    ];
+    void connectCmd;
+    const programArguments = [
+      "/bin/zsh",
+      "-lc",
+      [
+        `export PATH="$HOME/.local/bin:$HOME/bin:/usr/local/bin:/opt/homebrew/bin:$PATH"`,
+        `command -v tunnel-client >/dev/null 2>&1 || exit 0`, // client missing → exit quietly, retry next login
+        `tunnel-client runtimes status ${alias} --json 2>/dev/null | grep -q '"ready":true' && exit 0`,
+        `tunnel-client runtimes connect --alias ${alias} --profile consistorium-managed --tunnel-id ${tunnelId} --runtime-api-key 'file:${resolvedKeyFile}' --mcp-command '${bin} serve --read-only' --json`,
+      ].join("; "),
+    ];
+    const plist = `<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key><string>${label}</string>
+  <key>ProgramArguments</key>
+  <array>
+${programArguments.map((a) => `    <string>${a.replace(/&/g, "&amp;").replace(/</g, "&lt;")}</string>`).join("\n")}
+  </array>
+  <key>RunAtLoad</key><true/>
+  <key>StartInterval</key><integer>900</integer>
+  <key>StandardOutPath</key><string>${path.join(os.tmpdir(), `${label}.log`)}</string>
+  <key>StandardErrorPath</key><string>${path.join(os.tmpdir(), `${label}.err`)}</string>
+</dict>
+</plist>
+`;
+    await fs.promises.mkdir(plistDir, { recursive: true });
+    await fs.promises.writeFile(plistPath, plist, { mode: 0o600 });
+    console.log(`✓ Wrote ${plistPath}`);
+    console.log(`  Load it now:   launchctl bootstrap gui/$UID ${plistPath}`);
+    console.log(`  Check status:  tunnel-client runtimes status ${alias}`);
+    console.log(`  Remove later:  consistorium autostart remove --alias ${alias}`);
+    return;
+  }
+
+  // Linux systemd user unit
+  const unitDir = path.join(os.homedir(), ".config", "systemd", "user");
+  const unitName = `consistorium-tunnel-${alias}.service`;
+  const unitPath = path.join(unitDir, unitName);
+
+  if (action === "remove") {
+    try {
+      await fs.promises.unlink(unitPath);
+      console.log(`✓ Removed ${unitPath}`);
+      console.log(`  Run: systemctl --user daemon-reload`);
+    } catch {
+      console.error(`✗ Not found: ${unitPath}`);
+      process.exit(1);
+    }
+    return;
+  }
+
+  if (!tunnelId) {
+    console.error("✗ --tunnel-id tunnel_... is required for install (it is an identifier, not a secret).");
+    process.exit(1);
+  }
+  if (!fs.existsSync(resolvedKeyFile)) {
+    console.error(`✗ Runtime key file not found: ${resolvedKeyFile}`);
+    console.error("  Complete the key handoff in docs/chatgpt-setup.md first, or pass --key-file <path>.");
+    process.exit(1);
+  }
+  const execLine = `/bin/sh -lc 'command -v tunnel-client >/dev/null 2>&1 || exit 0; tunnel-client runtimes status ${alias} --json 2>/dev/null | grep -q "\\"ready\\":true\\"" + "' || tunnel-client runtimes connect --alias ${alias} --profile consistorium-managed --tunnel-id ${tunnelId} --runtime-api-key file:${resolvedKeyFile} --mcp-command \\"${bin} serve --read-only\\" --json'`;
+  const unit = `[Unit]
+Description=Consistorium Secure MCP Tunnel runtime (${alias})
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=${execLine}
+RemainAfterExit=no
+
+[Timer]
+OnBootSec=90
+OnUnitActiveSec=15min
+
+[Install]
+WantedBy=timers.target
+`;
+  // A timer+oneshot pair keeps this idempotent without a always-running daemon.
+  const timerName = `consistorium-tunnel-${alias}.timer`;
+  const timerPath = path.join(unitDir, timerName);
+  const serviceUnit = `[Unit]
+Description=Consistorium Secure MCP Tunnel runtime (${alias})
+After=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=${execLine}
+`;
+  await fs.promises.mkdir(unitDir, { recursive: true });
+  await fs.promises.writeFile(unitPath, serviceUnit, { mode: 0o600 });
+  await fs.promises.writeFile(timerPath, unit.slice(unit.indexOf("[Timer]")), { mode: 0o600 });
+  console.log(`✓ Wrote ${unitPath}`);
+  console.log(`✓ Wrote ${timerPath}`);
+  console.log(`  Enable now:   systemctl --user daemon-reload && systemctl --user enable --now consistorium-tunnel-${alias}.timer`);
+  console.log(`  Check status: tunnel-client runtimes status ${alias}`);
+  console.log(`  Remove later: consistorium autostart remove --alias ${alias}`);
+}
+
+function resolveCliCommandPath(): string {
+  const self = process.argv[1];
+  if (self && fs.existsSync(self)) {
+    try {
+      return fs.realpathSync(path.resolve(self));
+    } catch {
+      return path.resolve(self);
+    }
+  }
+  return "consistorium";
+}
+
+function buildServerEntry(command: string, args: string[], configPath: string): Record<string, unknown> {
+  return {
+    command,
+    args,
+    env: { CONSISTORIUM_CONFIG: configPath },
+  };
+}
+
+async function cmdMcpSnippet(args: string[]): Promise<void> {
+  let client: string | undefined;
+  let configPath: string | undefined;
+  for (let i = 0; i < args.length; i++) {
+    if ((args[i] === "--client" || args[i] === "-c") && args[i + 1]) client = args[++i]?.toLowerCase();
+    else if (args[i] === "--config" && args[i + 1]) configPath = args[++i];
+  }
+
+  if (!client) {
+    console.error("Usage: consistorium mcp-snippet --client <name> [--config <path>]");
+    console.error("Clients: claude-code, claude-desktop, cursor, windsurf, codex, generic");
+    process.exit(1);
+  }
+
+  // Resolve the config path exactly like doctor does, so the snippet always matches reality.
+  const explicit = configPath ?? process.env.CONSISTORIUM_CONFIG ?? process.env.CONTEXT_BRIDGE_CONFIG;
+  let resolvedConfig: string | null = null;
+  try {
+    const found = explicit ?? findConfigFile();
+    if (found) {
+      loadConfigSync(found); // prove it exists/parses; snippet should point at a working config
+      resolvedConfig = path.resolve(found);
+    }
+  } catch {
+    resolvedConfig = null;
+  }
+  if (!resolvedConfig) {
+    const fallback = getDefaultConfigPath();
+    console.error(`✗ No readable configuration found${explicit ? ` at ${explicit}` : ""}.`);
+    console.error(`  Run \`consistorium init\` first, or pass --config <path>.`);
+    console.error(`  Default location: ${fallback}`);
+    process.exit(1);
+  }
+
+  const bin = resolveCliCommandPath();
+
+  switch (client) {
+    case "claude-code": {
+      const entry = buildServerEntry(bin, ["serve"], resolvedConfig);
+      console.log(
+        `claude mcp add-json consistorium '${JSON.stringify(entry)}'`
+      );
+      break;
+    }
+    case "claude-desktop":
+    case "cursor":
+    case "windsurf": {
+      const scope =
+        client === "claude-desktop"
+          ? "Claude Desktop → Settings → Developer → Edit Config (claude_desktop_config.json)"
+          : client === "cursor"
+            ? "~/.cursor/mcp.json (or Project Settings → MCP → Add)"
+            : "~/.codeium/windsurf/mcp_config.json";
+      console.log(`// ${scope}`);
+      console.log(JSON.stringify({ mcpServers: { consistorium: buildServerEntry(bin, ["serve"], resolvedConfig) } }, null, 2));
+      break;
+    }
+    case "codex": {
+      console.log("# Add to ~/.codex/config.toml under [mcp_servers.consistorium]");
+      console.log("[mcp_servers.consistorium]");
+      console.log(`command = "${bin}"`);
+      console.log("args = [\"serve\"]");
+      console.log("");
+      console.log("[mcp_servers.consistorium.env]");
+      console.log(`CONSISTORIUM_CONFIG = "${resolvedConfig}"`);
+      break;
+    }
+    case "generic":
+      console.log(JSON.stringify(buildServerEntry(bin, ["serve"], resolvedConfig), null, 2));
+      break;
+    default:
+      console.error(`Unknown client: ${client}`);
+      console.error("Clients: claude-code, claude-desktop, cursor, windsurf, codex, generic");
+      process.exit(1);
   }
 }
 
@@ -472,6 +757,10 @@ async function main(): Promise<void> {
   }
   if (cmd === "doctor") {
     await cmdDoctor(rest);
+    return;
+  }
+  if (cmd === "mcp-snippet") {
+    await cmdMcpSnippet(rest);
     return;
   }
   if (cmd === "token") {

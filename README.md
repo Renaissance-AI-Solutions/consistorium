@@ -3,6 +3,10 @@
 [![CI](https://github.com/Renaissance-AI-Solutions/consistorium/actions/workflows/ci.yml/badge.svg)](https://github.com/Renaissance-AI-Solutions/consistorium/actions/workflows/ci.yml)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
 
+<p align="center">
+  <img src="assets/ConsistoriumBanner.png" alt="Consistorium — the command layer for agent coordination" width="100%">
+</p>
+
 > **Your strategist AI can't see your codebase. Fix that.**
 
 Consistorium is a local-first MCP server that gives any conversational model — ChatGPT included — grounded, current intelligence about the repositories your coding agents are actually working in: live git state, allowlisted documents, durable tasks, and agent-to-agent handoffs.
@@ -10,6 +14,8 @@ Consistorium is a local-first MCP server that gives any conversational model —
 **Use your best reasoning model as the general. Save coding agents for code.** Coding-agent time is scarce — metered in five-hour windows, weekly caps, and credit packs — yet much of it is spent re-discovering what already exists: repo structure, branch state, decisions made yesterday. Consistorium reverses the flow: your conversational strategist reads live project state on demand, decides what should happen next, and hands coding agents work so precise they never have to explore.
 
 No more pasting `git log` output into chat. No more stale summaries. Your coding agents do the work; Consistorium lets your best reasoning model see it.
+
+![Consistorium in 30 seconds: init, doctor, and a live project briefing](assets/demo.gif)
 
 ## The problem
 
@@ -199,3 +205,10 @@ Consistorium was built and battle-tested while operating [Corpus](https://corpus
 ## License
 
 Apache-2.0 — see [LICENSE](LICENSE).
+
+---
+
+## Built in public
+
+Follow along: [@TritiumAISol](https://x.com/TritiumAISol) (founder — build-in-public receipts) · [@AnAIRenaissance](https://x.com/AnAIRenaissance) (announcements + demos) · [The AI Renaissance on YouTube](https://www.youtube.com/@TheAIRenaissance)
+

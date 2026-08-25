@@ -194,7 +194,7 @@ Use the maintained handoffs in **[agent-install.md](agent-install.md)**. They co
 
 - local clients such as Claude Code, Codex, Cursor, Windsurf, and Hermes;
 - ChatGPT through a private, read-only OpenAI Secure MCP Tunnel runtime; and
-- repair when Corpus Connect is visible in ChatGPT but its tools are not callable.
+- repair when Project Context is visible in ChatGPT but its tools are not callable.
 
 The local-client micro-prompt is:
 
@@ -230,7 +230,7 @@ CLI commands: `init`, `config show`, `config validate`, `serve [--read-only] [--
 | Briefing shows empty purpose/architecture | No matching documents discovered; check filenames/globs and that files aren't denylisted (secrets, binaries) |
 | Node version error / `crypto is not defined` | You're on Node < 20; upgrade Node |
 | Windows path issues | Use absolute paths in configs; `$HOME` → `$env:USERPROFILE` in PowerShell |
-| Corpus Connect is visible but has no callable tools | Keep the managed runtime ready, open **Settings → Plugins → Corpus Connect → Refresh**, then attach it explicitly in a new chat; follow [chatgpt-setup.md](chatgpt-setup.md) |
+| Project Context is visible but has no callable tools | Keep the managed runtime ready, open **Settings → Plugins → Project Context → Refresh**, then attach it explicitly in a new chat; follow [chatgpt-setup.md](chatgpt-setup.md) |
 
 Still stuck? [Open an issue](https://github.com/Renaissance-AI-Solutions/consistorium/issues).
 

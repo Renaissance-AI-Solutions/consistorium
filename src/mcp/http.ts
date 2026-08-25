@@ -187,7 +187,7 @@ export async function startHttpServer(opts: HttpListenOptions = {}): Promise<Sta
       await mcp.connect(transport);
       await transport.handleRequest(req, res);
     } catch (error) {
-      console.error("[context-bridge] HTTP MCP error:", (error as Error).message);
+      console.error("[consistorium] HTTP MCP error:", (error as Error).message);
       sendJson(res, 500, {
         jsonrpc: "2.0",
         error: { code: -32603, message: "Internal server error" },
@@ -216,7 +216,7 @@ export async function startHttpServer(opts: HttpListenOptions = {}): Promise<Sta
   const url = `http://${displayHost}:${actualPort}/mcp`;
 
   console.error(
-    `[context-bridge] Streamable HTTP on ${url} (bind=${host} writes=${allowWrites ? "on" : "off"} auth=${token ? "bearer" : "anonymous-loopback"})`
+    `[consistorium] Streamable HTTP on ${url} (bind=${host} writes=${allowWrites ? "on" : "off"} auth=${token ? "bearer" : "anonymous-loopback"})`
   );
   if (token && !configuredToken && !process.env.CONTEXT_BRIDGE_TOKEN) {
     console.error(`[context-bridge] Generated bearer token (set CONTEXT_BRIDGE_TOKEN to pin it): ${token}`);

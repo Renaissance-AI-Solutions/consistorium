@@ -111,21 +111,21 @@ tunnel-client runtimes stop consistorium
 After a reboot, check status and repeat the `runtimes connect` command if needed. Per-user startup
 automation is optional and should be installed only with the user's approval.
 
-## 5. Create or refresh Corpus Connect in ChatGPT
+## 5. Create or refresh Project Context in ChatGPT
 
 Follow OpenAI's current [plugin connection flow](https://developers.openai.com/plugins/deploy/connect-chatgpt):
 
 1. Enable **Developer mode** in **Settings → Security and login**.
-2. In **ChatGPT Plugins**, create a developer app named **Corpus Connect**, choose **Tunnel** as
+2. In **ChatGPT Plugins**, create a developer app named **Project Context**, choose **Tunnel** as
    the connection, and select the intended tunnel.
-3. If Corpus Connect already exists, open **Settings → Plugins → Corpus Connect → Refresh**.
+3. If Project Context already exists, open **Settings → Plugins → Project Context → Refresh**.
    Refresh whenever tool names, schemas, annotations, or server metadata change.
 4. Confirm the action list includes `context_list_projects`. A visible plugin card alone does not
    attach its tools to a conversation.
-5. Start a **new** chat. Open **Add files and more**, search for **Corpus Connect**, and attach it.
+5. Start a **new** chat. Open **Add files and more**, search for **Project Context**, and attach it.
 6. Send this exact verification prompt:
 
-   > Use Corpus Connect. Call `context_list_projects` and return the raw tool result.
+   > Use Project Context. Call `context_list_projects` and return the raw tool result.
 
 The connection is complete only when that ChatGPT tool call returns the configured project names.
 An HTTP 200, a healthy process, or a visible app card by itself is not end-to-end proof.
@@ -135,7 +135,7 @@ An HTTP 200, a healthy process, or a visible app card by itself is not end-to-en
 Once the verification passes, start planning sessions with:
 
 ```text
-Use Corpus Connect as the factual source for this planning session. Call context_list_projects,
+Use Project Context as the factual source for this planning session. Call context_list_projects,
 then context_project_briefing for the project I name. Treat live_observation as current repository
 evidence and agent_record as a possibly stale claim. Act as the planning agent: clarify the goal,
 identify constraints and blockers, and produce a coding-agent handoff with objective, non-goals,
@@ -148,7 +148,7 @@ code and do not invent repository state.
 | Symptom | Check |
 |---|---|
 | Direct local call fails | Run `consistorium doctor`; fix configuration before touching the tunnel |
-| Corpus Connect is visible but tools are unavailable | Refresh it in Settings, then explicitly attach it to a new chat |
+| Project Context is visible but tools are unavailable | Refresh it in Settings, then explicitly attach it to a new chat |
 | Runtime is down or not ready | Run `tunnel-client runtimes status consistorium --json`, then reconnect the existing alias |
 | Runtime key authentication fails | Confirm the key file exists with owner-only permissions and the key has **Tunnels: Read + Use**; do not rotate it as a first guess |
 | Tunnel is healthy but receives no ChatGPT request | Confirm the Platform organization, ChatGPT workspace, selected tunnel, and per-chat attachment |

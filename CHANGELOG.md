@@ -7,22 +7,32 @@ adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ## [Unreleased]
 
+## [0.4.0] — 2026-08-25
+
 ### Added
 
+- Public launch release. Consistorium is now installable from npm with
+  `npm install -g consistorium`.
+- `consistorium serve --read-only`: stdio mode with the task/handoff write tools hidden — the
+  recommended surface for ChatGPT connections.
 - A copy-paste AI-agent installation handoff for local MCP clients, private ChatGPT planning
-  connections, and evidence-driven repair of an existing connection.
+  connections, and evidence-driven repair of an existing connection (docs/agent-install.md).
 - A release-package check that keeps CLI/MCP/plugin versions aligned and verifies that the npm
-  tarball contains its binaries, skills, and setup documentation.
-- A packaged-CLI smoke test for the read-only MCP surface used by ChatGPT.
+  tarball contains its binaries, skills, and setup documentation; CI now packs, globally installs
+  the tarball into a fresh prefix, and smoke-tests the read-only MCP surface from the installed
+  binary.
 
 ### Changed
 
-- ChatGPT setup now uses OpenAI Secure MCP Tunnel's managed stdio runtime with
+- ChatGPT setup uses OpenAI Secure MCP Tunnel's managed stdio runtime with
   `consistorium serve --read-only`; no separate local HTTP server is required.
 - Runtime credentials are stored in a user-only file and referenced with `file:`. Setup material
-  no longer asks users to paste a key into chat, command text, shell history, or documentation.
+  never asks users to paste a key into chat, command text, shell history, or documentation.
 - The npm source fallback builds before global installation, and package builds run automatically
   during packaging.
+- Documentation now uses a neutral "Project Context" example name for the ChatGPT developer-mode
+  app instead of an internal product name.
+- User-facing log lines consistently use the `[consistorium]` prefix.
 
 ## [0.3.0] — 2026-08-19
 

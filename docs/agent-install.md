@@ -101,7 +101,7 @@ Install Consistorium and connect it to ChatGPT as a private read-only planning s
 Desired project:
 - path: [USE THE CURRENT REPOSITORY, or put an absolute path here]
 - project name: [SHORT PROJECT NAME]
-- ChatGPT app name: Corpus Connect
+- ChatGPT app name: Project Context
 
 Work autonomously and perform every safe step you have tools for. Do not return a generic setup
 guide. Ask me only for an unavoidable account action, an ambiguous project path, or permission to
@@ -123,8 +123,8 @@ Required outcome:
 3. The runtime key is stored outside the repository in a user-only file.
 4. `tunnel-client runtimes connect` supervises `consistorium serve --read-only` over stdio.
 5. Runtime status reports process_running=true, healthy=true, ready=true, and no remote error.
-6. ChatGPT's Corpus Connect metadata lists `context_list_projects` and the other read-only tools.
-7. A new ChatGPT chat has Corpus Connect attached and a real `context_list_projects` call returns
+6. ChatGPT's Project Context metadata lists `context_list_projects` and the other read-only tools.
+7. A new ChatGPT chat has Project Context attached and a real `context_list_projects` call returns
    the configured projects.
 
 Procedure:
@@ -176,14 +176,14 @@ D. Create one managed, read-only runtime
 
 E. Refresh or create the ChatGPT connection
 - Enable Developer mode in ChatGPT Settings -> Security and login if it is off.
-- In ChatGPT Plugins, create the developer-mode app named Corpus Connect using Connection: Tunnel
+- In ChatGPT Plugins, create the developer-mode app named Project Context using Connection: Tunnel
   and the selected tunnel. Review discovered actions before accepting it.
-- If Corpus Connect already exists, open Settings -> Plugins -> Corpus Connect and select Refresh.
+- If Project Context already exists, open Settings -> Plugins -> Project Context and select Refresh.
   This is required after tool names, schemas, annotations, or server metadata change.
 - Confirm the refreshed action list contains `context_list_projects`. A visible plugin card alone
   is not proof that its tools are attached to a chat.
-- Start a new ChatGPT conversation, open Add files and more, search for Corpus Connect, and attach
-  it. Send: `Use Corpus Connect. Call context_list_projects and return the raw tool result.` If
+- Start a new ChatGPT conversation, open Add files and more, search for Project Context, and attach
+  it. Send: `Use Project Context. Call context_list_projects and return the raw tool result.` If
   browser policy prevents sending on my behalf, stage the complete message and ask me only to press
   Send.
 
@@ -203,7 +203,7 @@ F. Prove and document the result
 Use this before deleting the app, rotating a key, or creating a new tunnel.
 
 ```text
-Repair the existing Consistorium / Corpus Connect ChatGPT connection using evidence at every layer.
+Repair the existing Consistorium / Project Context ChatGPT connection using evidence at every layer.
 Do not rotate credentials, delete the ChatGPT app, create a new tunnel, or expose raw MCP payloads
 unless a specific diagnostic proves that action is necessary.
 
@@ -218,9 +218,9 @@ Check in this order:
    private repository data.
 5. Confirm whether the ChatGPT attempt reached the tunnel by comparing initialize, tools/list, and
    tools/call counters before and after one test.
-6. Open ChatGPT Settings -> Plugins -> Corpus Connect. Confirm `context_list_projects` is listed,
+6. Open ChatGPT Settings -> Plugins -> Project Context. Confirm `context_list_projects` is listed,
    select Refresh, and wait for server discovery/tools listing to complete.
-7. Start a new chat, explicitly attach Corpus Connect from Add files and more, and call
+7. Start a new chat, explicitly attach Project Context from Add files and more, and call
    `context_list_projects`.
 
 Interpretation:
@@ -239,10 +239,10 @@ result. Do not call a transport-level HTTP 200 proof of application success by i
 After installation, users can paste this once at the start of a planning conversation:
 
 ```text
-Use Corpus Connect as the factual source for this planning session. Begin with
+Use Project Context as the factual source for this planning session. Begin with
 `context_list_projects`, then call `context_project_briefing` for the project I name. Treat
 `live_observation` as current repository evidence and `agent_record` as a claim that may be stale.
-Do not invent repository state and do not say the tool is unavailable until Corpus Connect is
+Do not invent repository state and do not say the tool is unavailable until Project Context is
 attached and you have attempted the call.
 
 Act as the planning agent, not the coding agent. Clarify goals, identify constraints and blockers,

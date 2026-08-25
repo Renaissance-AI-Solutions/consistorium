@@ -65,8 +65,8 @@ CI must pass on:
   screenshots, or the repository; confirm key file permissions are user-only.
 - [ ] Confirm direct stdio `context_list_projects` works before adding the tunnel.
 - [ ] Confirm managed runtime status is running, healthy, and ready.
-- [ ] Refresh Corpus Connect and confirm its action list includes `context_list_projects`.
-- [ ] Start a new chat, attach Corpus Connect explicitly, and return real project names from the
+- [ ] Refresh Project Context and confirm its action list includes `context_list_projects`.
+- [ ] Start a new chat, attach Project Context explicitly, and return real project names from the
   tool call.
 - [ ] Reboot the test machine and confirm the documented restart path is sufficient.
 - [ ] Stop the runtime and use Prompt C to confirm the repair flow diagnoses the right layer without

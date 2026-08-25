@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 /**
- * context-bridge CLI — init, config validation, and helpers.
+ * Consistorium CLI — init, config validation, and helpers.
  */
 import * as fs from "node:fs";
 import * as path from "node:path";
@@ -13,7 +13,7 @@ import { bootstrap } from "../mcp/app.js";
 import { generateToken, startHttpServer, validateHttpOptions } from "../mcp/http.js";
 import { buildProjectBriefing } from "../core/briefing.js";
 
-const VERSION = "0.3.0";
+const VERSION = "0.4.0";
 
 function printHelp(): void {
   console.log(`

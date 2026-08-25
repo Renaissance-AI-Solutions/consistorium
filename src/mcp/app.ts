@@ -28,7 +28,7 @@ import { MCP_SERVER_INSTRUCTIONS, TOOL_DEFS, WRITE_TOOLS, canonicalToolName, typ
 import type { ResolvedConfig } from "../core/types.js";
 
 export const SERVER_NAME = "consistorium";
-export const SERVER_VERSION = "0.3.0";
+export const SERVER_VERSION = "0.4.0";
 
 export interface BridgeRuntime {
   config: ResolvedConfig;

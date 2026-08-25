@@ -7,6 +7,8 @@
 
 Consistorium is a local-first MCP server that gives any conversational model — ChatGPT included — grounded, current intelligence about the repositories your coding agents are actually working in: live git state, allowlisted documents, durable tasks, and agent-to-agent handoffs.
 
+**Use your best reasoning model as the general. Save coding agents for code.** Coding-agent time is scarce — metered in five-hour windows, weekly caps, and credit packs — yet much of it is spent re-discovering what already exists: repo structure, branch state, decisions made yesterday. Consistorium reverses the flow: your conversational strategist reads live project state on demand, decides what should happen next, and hands coding agents work so precise they never have to explore.
+
 No more pasting `git log` output into chat. No more stale summaries. Your coding agents do the work; Consistorium lets your best reasoning model see it.
 
 ## The problem
@@ -75,7 +77,7 @@ until context_list_projects and context_project_briefing work through the client
 ```
 
 For ChatGPT as the planning agent, use **Prompt B** in
-[docs/agent-install.md](docs/agent-install.md). If an existing Corpus Connect card is visible but
+[docs/agent-install.md](docs/agent-install.md). If an existing Project Context card is visible but
 not callable, use **Prompt C** before deleting anything or rotating a key.
 
 ## What it does

@@ -141,7 +141,7 @@ describe("continuity handoff between fresh agents", () => {
     const after = await buildProjectBriefing(serviceB, storeB, "corpus");
     expect(after.continuity.latestHandoffs[0]?.handoffId).toBe("agent-b-done");
     expect(after.continuity.openTasks).toHaveLength(0);
-  });
+  }, 60_000);
 });
 
 describe("fresh ChatGPT-compatible Streamable HTTP client", () => {

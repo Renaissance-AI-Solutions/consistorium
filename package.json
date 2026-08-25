@@ -7,7 +7,12 @@
     "consistorium": "./dist/cli/index.js"
   },
   "files": [
-    "dist",
+    "dist/adapters",
+    "dist/cli",
+    "dist/core",
+    "dist/mcp",
+    "dist/providers",
+    "docs",
     "plugin.json",
     "mcp.json",
     "skills",
@@ -25,7 +30,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:coverage": "vitest run --coverage",
-    "prepublishOnly": "npm run build"
+    "release:check": "npm run build && npm run typecheck && npm run lint && npm test && node scripts/release-check.mjs",
+    "prepack": "npm run build"
   },
   "keywords": [
     "mcp",

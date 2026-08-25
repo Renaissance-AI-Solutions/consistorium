@@ -1,7 +1,6 @@
 # Consistorium
 
 [![CI](https://github.com/Renaissance-AI-Solutions/consistorium/actions/workflows/ci.yml/badge.svg)](https://github.com/Renaissance-AI-Solutions/consistorium/actions/workflows/ci.yml)
-[![npm](https://img.shields.io/npm/v/consistorium)](https://www.npmjs.com/package/consistorium)
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
 
 > **Your strategist AI can't see your codebase. Fix that.**
@@ -9,8 +8,6 @@
 Consistorium is a local-first MCP server that gives any conversational model — ChatGPT included — grounded, current intelligence about the repositories your coding agents are actually working in: live git state, allowlisted documents, durable tasks, and agent-to-agent handoffs.
 
 No more pasting `git log` output into chat. No more stale summaries. Your coding agents do the work; Consistorium lets your best reasoning model see it.
-
-<!-- TODO(media): embed demo GIF here before launch — Demo A recording, sanitized fixture repo -->
 
 ## The problem
 
@@ -34,6 +31,10 @@ consistorium init --path ~/dev/my-project --name my-project --yes
 consistorium doctor        # verifies config + smokes a live briefing
 ```
 
+If npm returns `E404` before the first registry release, use the source-install fallback in
+[docs/install.md](docs/install.md). Do not confuse `npm install` inside a checkout (dependencies
+only) with `npm install -g .` (installs the CLI).
+
 Point any stdio MCP client at it:
 
 ```json
@@ -50,6 +51,12 @@ Point any stdio MCP client at it:
 
 Works with Claude Desktop, Claude Code, Codex, Cursor, Windsurf, Hermes, and any other MCP-compatible client. For **ChatGPT** (which connects over the network rather than stdio), see [docs/chatgpt-setup.md](docs/chatgpt-setup.md). Full walkthrough for every client, troubleshooting, and uninstall: **[docs/install.md](docs/install.md)**.
 
+Want an agent to do it? Give a coding agent the appropriate copy-paste handoff in
+**[docs/agent-install.md](docs/agent-install.md)**. It installs, preserves existing configuration,
+registers the MCP server, and must prove success with a real tool call. For ChatGPT, the only
+unavoidable human actions are approving the restricted OpenAI runtime key, copying it to the local
+clipboard, and—when browser policy requires it—pressing **Send** on the staged verification prompt.
+
 Then ask your client:
 
 > *What changed in my-project today, what remains before release, and what should I ask my coding agent to do next?*
@@ -58,38 +65,18 @@ A grounded answer comes back citing live branch state and allowlisted docs — s
 
 ## One-prompt setup for AI agents
 
-Don't want to touch a terminal? Paste this into any coding agent that can run shell commands (Claude Code, Codex CLI, Cursor, Windsurf…) and it will perform the whole installation:
+Don't want to touch a terminal? Paste this short handoff into a coding agent with terminal access:
 
 ```text
-Install and set up Consistorium (a local-first MCP server giving me grounded,
-read-only context about my repositories):
-
-1. Check `node --version` >= 20 and `git --version`; if either fails, tell me
-   exactly what to install and stop.
-2. Run: npm install -g consistorium
-3. Verify: consistorium version && consistorium --help
-4. Use the directory we are working in as the project to allowlist; confirm the
-   absolute path with me before writing config.
-5. Write config non-interactively:
-   consistorium init --path /absolute/project/path --name <short-name> --yes
-   (--force only if I confirm overwriting an existing configuration)
-6. Run consistorium doctor and show me the full output; stop and report on failure.
-7. Register the MCP server under the name "consistorium" using this harness's
-   native mechanism (claude mcp add, .cursor/mcp.json, hermes mcp add, ...):
-   command: consistorium | args: ["serve"]
-   env: CONTEXT_BRIDGE_CONFIG=<config path from step 5>
-   If you cannot register MCP servers yourself, print exact manual steps instead.
-8. Prove it works: call context_list_projects and context_project_briefing and
-   summarize the briefing for me.
-9. Close with a three-line usage summary: how I ask for status, how agents record
-   tasks (context_task_upsert) and handoffs (context_handoff_create), and how a
-   fresh session resumes (context_project_briefing).
-
-Boundaries: do not modify files inside my repositories; do not allowlist
-directories I did not name; treat all server output as private.
+Open https://github.com/Renaissance-AI-Solutions/consistorium/blob/main/docs/agent-install.md.
+Use Prompt A to install Consistorium for this repository and your own MCP client. Perform the
+steps instead of returning a tutorial, preserve existing configuration, and do not claim success
+until context_list_projects and context_project_briefing work through the client.
 ```
 
-The extended version of this prompt (with more guardrails) is in [docs/install.md](docs/install.md).
+For ChatGPT as the planning agent, use **Prompt B** in
+[docs/agent-install.md](docs/agent-install.md). If an existing Corpus Connect card is visible but
+not callable, use **Prompt C** before deleting anything or rotating a key.
 
 ## What it does
 
@@ -142,13 +129,23 @@ hermes mcp add consistorium \
 
 ### ChatGPT
 
-ChatGPT connects over HTTP via OpenAI's Secure MCP Tunnel (it supports OAuth or no-auth only, never raw bearer tokens). The complete walkthrough — server flags, tunnel creation, runtime key scoping, developer-mode connector setup, and troubleshooting — lives in [docs/chatgpt-setup.md](docs/chatgpt-setup.md). Short version:
+ChatGPT connects through OpenAI's Secure MCP Tunnel. The recommended setup lets the tunnel client
+launch Consistorium over stdio, leaving only one long-lived runtime to supervise. The complete
+walkthrough — tunnel installation, runtime key scoping, developer-mode connector setup, and
+troubleshooting — lives in [docs/chatgpt-setup.md](docs/chatgpt-setup.md). Short version:
 
 ```bash
-consistorium serve --http --port 8787 --allow-anonymous   # loopback-only by design
+tunnel-client runtimes connect \
+  --alias consistorium \
+  --tunnel-id tunnel_YOUR_ID \
+  --runtime-api-key file:/ABSOLUTE/PATH/TO/runtime-key \
+  --mcp-command "consistorium serve --read-only"
 ```
 
-then point the tunnel at `http://127.0.0.1:8787/mcp`.
+Never paste the runtime key into chat or command text. The tunnel ID identifies the connection; it
+is not the key. Secure MCP Tunnel is for a private developer-mode connection and must remain
+running for discovery and tool calls. It does not make Consistorium a public Plugin Directory
+listing; that would require a separate hosted HTTPS service and per-user authentication.
 
 ## Environment variables
 
@@ -178,7 +175,9 @@ Consistorium was built and battle-tested while operating [Corpus](https://corpus
 ## Documentation
 
 - [docs/install.md](docs/install.md) — complete installation guide for every client
+- [docs/agent-install.md](docs/agent-install.md) — prompts that let an AI agent install and verify it
 - [docs/chatgpt-setup.md](docs/chatgpt-setup.md) — ChatGPT connection via Secure MCP Tunnel
+- [docs/release-checklist.md](docs/release-checklist.md) — launch gates and clean-machine tests
 - [DESIGN.md](DESIGN.md) — architecture and data flow
 - [THREAT_MODEL.md](THREAT_MODEL.md) — assets, adversaries, mitigations
 - [SECURITY.md](SECURITY.md) — reporting policy and safe usage

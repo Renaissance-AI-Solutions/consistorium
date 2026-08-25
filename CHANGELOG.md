@@ -5,6 +5,25 @@ All notable changes to Consistorium are recorded here.
 The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project
 adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- A copy-paste AI-agent installation handoff for local MCP clients, private ChatGPT planning
+  connections, and evidence-driven repair of an existing connection.
+- A release-package check that keeps CLI/MCP/plugin versions aligned and verifies that the npm
+  tarball contains its binaries, skills, and setup documentation.
+- A packaged-CLI smoke test for the read-only MCP surface used by ChatGPT.
+
+### Changed
+
+- ChatGPT setup now uses OpenAI Secure MCP Tunnel's managed stdio runtime with
+  `consistorium serve --read-only`; no separate local HTTP server is required.
+- Runtime credentials are stored in a user-only file and referenced with `file:`. Setup material
+  no longer asks users to paste a key into chat, command text, shell history, or documentation.
+- The npm source fallback builds before global installation, and package builds run automatically
+  during packaging.
+
 ## [0.3.0] — 2026-08-19
 
 First release intended for public use. The tool rename below is breaking.

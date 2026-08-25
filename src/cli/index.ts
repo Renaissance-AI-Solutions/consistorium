@@ -27,6 +27,7 @@ Commands:
   config show           Show resolved configuration
   config validate       Validate configuration file
   serve                 Start MCP stdio server (default)
+  serve --read-only     Start MCP stdio without task/handoff write tools
   serve --http          Start ChatGPT-compatible Streamable HTTP on /mcp
   doctor                Check config, state dir, and smoke a project briefing
   token                 Generate a bearer token for the HTTP transport
@@ -342,7 +343,7 @@ async function cmdServe(args: string[]): Promise<void> {
   const http = args.includes("--http");
   if (!http) {
     const { startStdioServer } = await import("../mcp/server.js");
-    await startStdioServer();
+    await startStdioServer({ allowWrites: !args.includes("--read-only") });
     return;
   }
 

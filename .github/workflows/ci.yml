@@ -28,6 +28,18 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Check release metadata and package contents
+        run: node scripts/release-check.mjs
+
+      - name: Pack and smoke-install the CLI
+        shell: bash
+        run: |
+          package_file="$(npm pack --silent)"
+          install_prefix="$RUNNER_TEMP/consistorium-smoke"
+          npm install --global --prefix "$install_prefix" "./$package_file"
+          "$install_prefix/bin/consistorium" version
+          CONSISTORIUM_BIN="$install_prefix/bin/consistorium" node scripts/smoke-readonly.mjs
+
       - name: Typecheck
         run: npm run typecheck
 

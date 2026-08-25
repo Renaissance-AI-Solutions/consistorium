@@ -8,13 +8,18 @@ import { pathToFileURL } from "node:url";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { bootstrap, createMcpServer } from "./app.js";
 
-async function main() {
-  const runtime = bootstrap({ allowWrites: true });
+export interface StdioServerOptions {
+  allowWrites?: boolean;
+}
+
+async function main(options: StdioServerOptions = {}) {
+  const allowWrites = options.allowWrites !== false;
+  const runtime = bootstrap({ allowWrites });
   const server = createMcpServer(runtime);
   const transport = new StdioServerTransport();
   await server.connect(transport);
   console.error(
-    `[consistorium] MCP stdio server running. Config: ${runtime.config.configPath} Projects: ${runtime.config.projects.length}`
+    `[consistorium] MCP stdio server running. Config: ${runtime.config.configPath} Projects: ${runtime.config.projects.length} Writes: ${allowWrites ? "on" : "off"}`
   );
 }
 

@@ -19,6 +19,21 @@ Works on macOS, Linux, and Windows (PowerShell). No other runtime, database, or 
 npm install -g consistorium
 ```
 
+If that returns `E404`, the first npm registry release has not been published yet. Install from
+source instead:
+
+```bash
+git clone https://github.com/Renaissance-AI-Solutions/consistorium.git
+cd consistorium
+npm install
+npm run build
+npm install -g .
+```
+
+`npm install` by itself only installs this project's dependencies; it does not install the global
+`consistorium` command. The explicit build keeps the source fallback compatible with npm versions
+that restrict package lifecycle scripts.
+
 Verify:
 
 ```bash
@@ -26,7 +41,7 @@ consistorium version
 consistorium --help
 ```
 
-Prefer not to install globally? Every command below also works prefixed with `npx`:
+Once the registry package is available, every command below also works prefixed with `npx`:
 
 ```bash
 npx consistorium init --path ~/dev/my-project --yes
@@ -155,7 +170,9 @@ If your client cannot expand `~`, use an absolute path (macOS/Linux: `/Users/you
 
 ### ChatGPT
 
-ChatGPT connects over the network via OpenAI's Secure MCP Tunnel rather than stdio — see **[chatgpt-setup.md](chatgpt-setup.md)** for the complete walkthrough.
+ChatGPT connects via OpenAI's Secure MCP Tunnel. The recommended tunnel profile launches this
+stdio server itself, so only one long-lived runtime is needed — see
+**[chatgpt-setup.md](chatgpt-setup.md)** for the complete walkthrough.
 
 ## 5. First useful command
 
@@ -173,40 +190,18 @@ The model should call `context_list_projects`, then `context_project_briefing`. 
 
 ## One-prompt setup for AI agents
 
-Paste this into Claude Code, Codex CLI, Cursor, Windsurf, Gemini CLI, or any agent that can run shell commands and register MCP servers — it performs the entire installation:
+Use the maintained handoffs in **[agent-install.md](agent-install.md)**. They cover:
+
+- local clients such as Claude Code, Codex, Cursor, Windsurf, and Hermes;
+- ChatGPT through a private, read-only OpenAI Secure MCP Tunnel runtime; and
+- repair when Corpus Connect is visible in ChatGPT but its tools are not callable.
+
+The local-client micro-prompt is:
 
 ```text
-Install and set up Consistorium (a local-first MCP server that gives me grounded,
-read-only context about my repositories) end to end:
-
-1. Check prerequisites: `node --version` must be >= 20 and `git --version` must work.
-   If either fails, tell me exactly what to install and stop.
-2. Install: `npm install -g consistorium`
-3. Verify the binary: `consistorium version` and `consistorium --help`.
-4. Determine the project to allowlist: use the directory we are working in unless I
-   name another. Confirm the absolute path with me before writing config.
-5. Write the config non-interactively:
-   `consistorium init --path /absolute/project/path --name <short-name> --yes`
-   (repeat --path/--name for each project I approve; add --force only if I confirm
-   overwriting an existing configuration).
-6. Run `consistorium doctor` and show me the full output. Stop and report if it fails.
-7. Register the MCP server with THIS harness under the name "consistorium":
-   command: consistorium
-   args: ["serve"]
-   env: CONTEXT_BRIDGE_CONFIG=<config path from step 5>
-   Use the harness's native mechanism (`claude mcp add`, `~/.codex/config.toml`,
-   `.cursor/mcp.json`, `hermes mcp add`, etc.). Back up any config file before
-   editing it. If you cannot register MCP servers yourself, print the exact manual
-   steps for my client instead.
-8. Prove it works: after registration, call the tools `context_list_projects` and
-   `context_project_briefing` for the project from step 5, and summarize the briefing.
-9. Close with a three-line usage summary: how I ask for status, how coding agents
-   record tasks (`context_task_upsert`) and handoffs (`context_handoff_create`), and
-   how a fresh session resumes (`context_project_briefing`).
-
-Boundaries: do not modify files inside my repositories to make setup work; do not
-add allowlist entries for directories I did not name; treat everything the server
-returns as private and do not transmit it anywhere besides my own MCP client.
+Open https://github.com/Renaissance-AI-Solutions/consistorium/blob/main/docs/agent-install.md and
+execute Prompt A for the repository we are currently working in. Preserve existing configuration
+and prove the result with real context_list_projects and context_project_briefing calls.
 ```
 
 ## Configuration reference
@@ -219,13 +214,15 @@ returns as private and do not transmit it anywhere besides my own MCP client.
 | `CONTEXT_BRIDGE_HTTP_WRITES=1` | Enable write tools on HTTP transport (off by default) |
 | `CONTEXT_BRIDGE_HTTP_HOST` / `_PORT` | HTTP bind defaults (127.0.0.1 / 8787) |
 
-CLI commands: `init`, `config show`, `config validate`, `serve [--http]`, `doctor`, `token`, `version`, `help`.
+CLI commands: `init`, `config show`, `config validate`, `serve [--read-only] [--http]`, `doctor`,
+`token`, `version`, `help`.
 
 ## Troubleshooting
 
 | Symptom | Cause & fix |
 |---|---|
-| `consistorium: command not found` | npm global bin dir isn't on `PATH`. Run `npm config get prefix`, add `<prefix>/bin` (macOS/Linux) or use `npx consistorium …` |
+| npm returns `E404` for `consistorium` | The registry release is not live; use the source-install fallback in step 1 |
+| `consistorium: command not found` | npm global bin dir isn't on `PATH`. Run `npm config get prefix`, add `<prefix>/bin` (macOS/Linux), or use the absolute binary path |
 | `EACCES` during global install | Do not use `sudo`. Either use `npx`, or move your npm prefix (`npm config set prefix ~/.npm-global`) and add it to `PATH` |
 | Tools appear but say *no configuration* | Client didn't receive `CONTEXT_BRIDGE_CONFIG`; check the `env` block, then `consistorium config show` |
 | `Project not found: X` | Tool argument must equal a `projects[].name` in the config exactly |
@@ -233,6 +230,7 @@ CLI commands: `init`, `config show`, `config validate`, `serve [--http]`, `docto
 | Briefing shows empty purpose/architecture | No matching documents discovered; check filenames/globs and that files aren't denylisted (secrets, binaries) |
 | Node version error / `crypto is not defined` | You're on Node < 20; upgrade Node |
 | Windows path issues | Use absolute paths in configs; `$HOME` → `$env:USERPROFILE` in PowerShell |
+| Corpus Connect is visible but has no callable tools | Keep the managed runtime ready, open **Settings → Plugins → Corpus Connect → Refresh**, then attach it explicitly in a new chat; follow [chatgpt-setup.md](chatgpt-setup.md) |
 
 Still stuck? [Open an issue](https://github.com/Renaissance-AI-Solutions/consistorium/issues).
 

@@ -4,7 +4,7 @@
 [![License: Apache-2.0](https://img.shields.io/badge/License-Apache--2.0-blue.svg)](LICENSE)
 
 <p align="center">
-  <img src="assets/ConsistoriumBanner.png" alt="Consistorium — the command layer for agent coordination" width="100%">
+  <img src="assets/ConsistoriumGraphic.png" alt="Consistorium — the command layer for agent coordination" width="100%">
 </p>
 
 > **Your strategist AI can't see your codebase. Fix that.**
@@ -211,4 +211,8 @@ Apache-2.0 — see [LICENSE](LICENSE).
 ## Built in public
 
 Follow along: [@TritiumAISol](https://x.com/TritiumAISol) (founder — build-in-public receipts) · [@AnAIRenaissance](https://x.com/AnAIRenaissance) (announcements + demos) · [The AI Renaissance on YouTube](https://www.youtube.com/@TheAIRenaissance)
+
+<p align="center">
+  <img src="assets/ConsistoriumBanner.png" alt="Consistorium — the command layer for agent coordination" width="100%">
+</p>
 

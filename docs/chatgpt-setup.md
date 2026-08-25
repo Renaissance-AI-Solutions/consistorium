@@ -125,8 +125,18 @@ tunnel-client runtimes status consistorium
 tunnel-client runtimes stop consistorium
 ```
 
-After a reboot, check status and repeat the `runtimes connect` command if needed. Per-user startup
-automation is optional and should be installed only with the user's approval.
+After a reboot, check status and repeat the `runtimes connect` command if needed — or let
+Consistorium do it for you:
+
+```bash
+# Per-user launcher (macOS launchd agent / Linux systemd user timer).
+consistorium autostart install --alias consistorium --tunnel-id tunnel_YOUR_ID
+```
+
+The launcher is idempotent (it exits early when the runtime already reports `ready`), touches
+nothing system-wide, and contains no key material — it references the owner-only key file from
+step 3. Remove it with `consistorium autostart remove --alias consistorium`. Logs land in
+`~/.cache/consistorium/`.
 
 ## 5. Create or refresh Project Context in ChatGPT
 

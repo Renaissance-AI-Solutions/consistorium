@@ -100,6 +100,18 @@ Doctor checks your config, state directory, and runs a live smoke briefing again
 
 All stdio-based clients use the same shape: run command `consistorium` with argument `serve`, plus the `CONSISTORIUM_CONFIG` environment variable pointing at your config.
 
+**Shortcut:** instead of hand-editing configs, let the CLI print (or run) the registration for
+your client:
+
+```bash
+consistorium mcp-snippet --client claude-code    # prints a ready-to-run claude mcp add-json command
+consistorium mcp-snippet --client cursor         # prints the ~/.cursor/mcp.json block
+# also: claude-desktop, windsurf, codex, generic
+```
+
+The snippet always uses your resolved absolute config path, so what it prints is exactly what
+`doctor` will validate.
+
 ### Claude Desktop
 
 Edit `claude_desktop_config.json` (**Settings → Developer → Edit Config**; macOS: `~/Library/Application Support/Claude/`, Windows: `%APPDATA%\Claude\`):
@@ -218,6 +230,7 @@ Upgrading from v0.3 or earlier? All pre-0.4 `CONTEXT_BRIDGE_*` variable names st
 `CONSISTORIUM_*` wins when both are set.
 
 CLI commands: `init`, `config show`, `config validate`, `serve [--read-only] [--http]`, `doctor`,
+`mcp-snippet --client <name>`, `autostart install|remove` (ChatGPT tunnel runtime launcher),
 `token`, `version`, `help`.
 
 ## Troubleshooting

@@ -343,29 +343,33 @@ async function cmdConfigValidate(args: string[]): Promise<void> {
   }
 }
 
-function readFlag(args: string[], name: string): string | undefined {
-  const idx = args.indexOf(name);
-  if (idx >= 0 && args[idx + 1]) return args[idx + 1];
-  return undefined;
-}
-
 /**
  * Per-user autostart for the managed tunnel runtime (the ChatGPT path).
  *
  * The tunnel-client runtime must be running for ChatGPT discovery and every tool call, but it
  * does not survive reboots on its own. `autostart install` writes a per-user launcher that
- * runs the exact `runtimes connect` command at login. Nothing system-wide is touched and no
- * key material appears in the launcher file — it references the existing 0600 key file.
+ * re-runs the exact `runtimes connect` command at login (and periodically). Nothing
+ * system-wide is touched and no key material appears in the launcher file — it references the
+ * existing owner-only key file.
  */
+function buildConnectShell(alias: string, tunnelId: string, keyFile: string, bin: string): string {
+  // Idempotent: skip when tunnel-client is missing or the runtime is already ready.
+  return [
+    `command -v tunnel-client >/dev/null 2>&1 || exit 0`,
+    `tunnel-client runtimes status ${alias} --json 2>/dev/null | grep -q '"ready":true' && exit 0`,
+    `tunnel-client runtimes connect --alias ${alias} --profile consistorium-managed --tunnel-id ${tunnelId} --runtime-api-key 'file:${keyFile}' --mcp-command '${bin} serve --read-only' --json`,
+  ].join("; ");
+}
+
 async function cmdAutostart(args: string[]): Promise<void> {
   const action = args[0];
-  let alias = "consistorium";
-  let tunnelId: string | undefined;
-  let keyFile: string | undefined;
-  for (let i = 1; i < args.length; i++) {
-    if ((args[i] === "--alias" || args[i] === "-a") && args[i + 1]) alias = args[++i]!;
-    else if (args[i] === "--tunnel-id" && args[i + 1]) tunnelId = args[++i];
-    else if (args[i] === "--key-file" && args[i + 1]) keyFile = args[++i];
+  const alias = readFlag(args, "--alias") ?? "consistorium";
+  const tunnelId = readFlag(args, "--tunnel-id");
+  const keyFlag = readFlag(args, "--key-file");
+
+  if (action !== "install" && action !== "remove") {
+    console.error("Usage: consistorium autostart <install|remove> [--alias consistorium] [--tunnel-id tunnel_...] [--key-file <path>]");
+    process.exit(1);
   }
 
   const isMac = process.platform === "darwin";
@@ -375,33 +379,12 @@ async function cmdAutostart(args: string[]): Promise<void> {
     console.error("  On Windows, create a Task Scheduler job that runs the same `runtimes connect` command.");
     process.exit(1);
   }
-  if (action !== "install" && action !== "remove") {
-    console.error("Usage: consistorium autostart <install|remove> [--alias consistorium] [--tunnel-id tunnel_...] [--key-file <path>]");
-    process.exit(1);
-  }
 
-  const bin = resolveCliCommandPath();
-  const resolvedKeyFile = keyFile ?? path.join(os.homedir(), ".config", "tunnel-client", "runtime-key");
+  const resolvedKeyFile = path.resolve(
+    (keyFlag ?? path.join(os.homedir(), ".config", "tunnel-client", "runtime-key")).replace(/^~/, os.homedir())
+  );
 
-  // macOS launchd
-  if (isMac) {
-    const plistDir = path.join(os.homedir(), "Library", "LaunchAgents");
-    const label = `us.corpuslaw.consistorium-tunnel.${alias}`;
-    const plistPath = path.join(plistDir, `${label}.plist`);
-
-    if (action === "remove") {
-      try {
-        await fs.promises.unlink(plistPath);
-        console.log(`✓ Removed ${plistPath}`);
-        console.log(`  Run: launchctl bootout gui/$UID/${label} 2>/dev/null || true`);
-      } catch {
-        console.error(`✗ Not found: ${plistPath}`);
-        process.exit(1);
-      }
-      return;
-    }
-
-    // install
+  if (action === "install") {
     if (!tunnelId) {
       console.error("✗ --tunnel-id tunnel_... is required for install (it is an identifier, not a secret).");
       process.exit(1);
@@ -411,21 +394,31 @@ async function cmdAutostart(args: string[]): Promise<void> {
       console.error("  Complete the key handoff in docs/chatgpt-setup.md first, or pass --key-file <path>.");
       process.exit(1);
     }
-    const connectCmd = [
-      bin,
-      "exec", // placeholder replaced below — see note
-    ];
-    void connectCmd;
-    const programArguments = [
-      "/bin/zsh",
-      "-lc",
-      [
-        `export PATH="$HOME/.local/bin:$HOME/bin:/usr/local/bin:/opt/homebrew/bin:$PATH"`,
-        `command -v tunnel-client >/dev/null 2>&1 || exit 0`, // client missing → exit quietly, retry next login
-        `tunnel-client runtimes status ${alias} --json 2>/dev/null | grep -q '"ready":true' && exit 0`,
-        `tunnel-client runtimes connect --alias ${alias} --profile consistorium-managed --tunnel-id ${tunnelId} --runtime-api-key 'file:${resolvedKeyFile}' --mcp-command '${bin} serve --read-only' --json`,
-      ].join("; "),
-    ];
+  }
+
+  const bin = resolveCliCommandPath();
+
+  // ---- macOS launchd agent -------------------------------------------------
+  if (isMac) {
+    const plistDir = path.join(os.homedir(), "Library", "LaunchAgents");
+    const label = `us.corpuslaw.consistorium-tunnel.${alias}`;
+    const plistPath = path.join(plistDir, `${label}.plist`);
+
+    if (action === "remove") {
+      try {
+        await fs.promises.unlink(plistPath);
+        console.log(`✓ Removed ${plistPath}`);
+        console.log(`  Unload now: launchctl bootout gui/$UID/${label} 2>/dev/null || true`);
+      } catch {
+        console.error(`✗ Not found: ${plistPath}`);
+        process.exit(1);
+      }
+      return;
+    }
+
+    const programArguments = ["/bin/zsh", "-lc", buildConnectShell(alias, tunnelId!, resolvedKeyFile, bin)];
+    const esc = (s: string): string => s.replace(/&/g, "&amp;").replace(/</g, "&lt;");
+    const logBase = path.join(os.homedir(), ".cache", "consistorium");
     const plist = `<?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
@@ -433,16 +426,17 @@ async function cmdAutostart(args: string[]): Promise<void> {
   <key>Label</key><string>${label}</string>
   <key>ProgramArguments</key>
   <array>
-${programArguments.map((a) => `    <string>${a.replace(/&/g, "&amp;").replace(/</g, "&lt;")}</string>`).join("\n")}
+${programArguments.map((a) => `    <string>${esc(a)}</string>`).join("\n")}
   </array>
   <key>RunAtLoad</key><true/>
   <key>StartInterval</key><integer>900</integer>
-  <key>StandardOutPath</key><string>${path.join(os.tmpdir(), `${label}.log`)}</string>
-  <key>StandardErrorPath</key><string>${path.join(os.tmpdir(), `${label}.err`)}</string>
+  <key>StandardOutPath</key><string>${path.join(logBase, `${label}.log`)}</string>
+  <key>StandardErrorPath</key><string>${path.join(logBase, `${label}.err`)}</string>
 </dict>
 </plist>
 `;
     await fs.promises.mkdir(plistDir, { recursive: true });
+    await fs.promises.mkdir(logBase, { recursive: true });
     await fs.promises.writeFile(plistPath, plist, { mode: 0o600 });
     console.log(`✓ Wrote ${plistPath}`);
     console.log(`  Load it now:   launchctl bootstrap gui/$UID ${plistPath}`);
@@ -451,41 +445,49 @@ ${programArguments.map((a) => `    <string>${a.replace(/&/g, "&amp;").replace(/<
     return;
   }
 
-  // Linux systemd user unit
+  // ---- Linux systemd user unit + timer -------------------------------------
   const unitDir = path.join(os.homedir(), ".config", "systemd", "user");
-  const unitName = `consistorium-tunnel-${alias}.service`;
-  const unitPath = path.join(unitDir, unitName);
+  const base = `consistorium-tunnel-${alias}`;
+  const unitPath = path.join(unitDir, `${base}.service`);
+  const timerPath = path.join(unitDir, `${base}.timer`);
 
   if (action === "remove") {
-    try {
-      await fs.promises.unlink(unitPath);
-      console.log(`✓ Removed ${unitPath}`);
-      console.log(`  Run: systemctl --user daemon-reload`);
-    } catch {
-      console.error(`✗ Not found: ${unitPath}`);
+    let removed = false;
+    for (const p of [timerPath, unitPath]) {
+      try {
+        await fs.promises.unlink(p);
+        removed = true;
+        console.log(`✓ Removed ${p}`);
+      } catch {
+        /* already gone */
+      }
+    }
+    if (!removed) {
+      console.error(`✗ Nothing to remove under ${unitDir}`);
       process.exit(1);
     }
+    console.log("  Run: systemctl --user daemon-reload && systemctl --user disable --now " + base + ".timer 2>/dev/null || true");
     return;
   }
 
-  if (!tunnelId) {
-    console.error("✗ --tunnel-id tunnel_... is required for install (it is an identifier, not a secret).");
-    process.exit(1);
-  }
-  if (!fs.existsSync(resolvedKeyFile)) {
-    console.error(`✗ Runtime key file not found: ${resolvedKeyFile}`);
-    console.error("  Complete the key handoff in docs/chatgpt-setup.md first, or pass --key-file <path>.");
-    process.exit(1);
-  }
-  const execLine = `/bin/sh -lc 'command -v tunnel-client >/dev/null 2>&1 || exit 0; tunnel-client runtimes status ${alias} --json 2>/dev/null | grep -q "\\"ready\\":true\\"" + "' || tunnel-client runtimes connect --alias ${alias} --profile consistorium-managed --tunnel-id ${tunnelId} --runtime-api-key file:${resolvedKeyFile} --mcp-command \\"${bin} serve --read-only\\" --json'`;
-  const unit = `[Unit]
+  const execLine = `/bin/sh -lc '${buildConnectShell(alias, tunnelId!, resolvedKeyFile, bin).replace(/'/g, `'\\''`)}'`;
+  await fs.promises.mkdir(unitDir, { recursive: true });
+  await fs.promises.writeFile(
+    unitPath,
+    `[Unit]
 Description=Consistorium Secure MCP Tunnel runtime (${alias})
 After=network-online.target
 
 [Service]
 Type=oneshot
 ExecStart=${execLine}
-RemainAfterExit=no
+`,
+    { mode: 0o600 }
+  );
+  await fs.promises.writeFile(
+    timerPath,
+    `[Unit]
+Description=Periodically ensure the Consistorium tunnel runtime is ready
 
 [Timer]
 OnBootSec=90
@@ -493,24 +495,12 @@ OnUnitActiveSec=15min
 
 [Install]
 WantedBy=timers.target
-`;
-  // A timer+oneshot pair keeps this idempotent without a always-running daemon.
-  const timerName = `consistorium-tunnel-${alias}.timer`;
-  const timerPath = path.join(unitDir, timerName);
-  const serviceUnit = `[Unit]
-Description=Consistorium Secure MCP Tunnel runtime (${alias})
-After=network-online.target
-
-[Service]
-Type=oneshot
-ExecStart=${execLine}
-`;
-  await fs.promises.mkdir(unitDir, { recursive: true });
-  await fs.promises.writeFile(unitPath, serviceUnit, { mode: 0o600 });
-  await fs.promises.writeFile(timerPath, unit.slice(unit.indexOf("[Timer]")), { mode: 0o600 });
+`,
+    { mode: 0o600 }
+  );
   console.log(`✓ Wrote ${unitPath}`);
   console.log(`✓ Wrote ${timerPath}`);
-  console.log(`  Enable now:   systemctl --user daemon-reload && systemctl --user enable --now consistorium-tunnel-${alias}.timer`);
+  console.log(`  Enable now:   systemctl --user daemon-reload && systemctl --user enable --now ${base}.timer`);
   console.log(`  Check status: tunnel-client runtimes status ${alias}`);
   console.log(`  Remove later: consistorium autostart remove --alias ${alias}`);
 }
@@ -761,6 +751,10 @@ async function main(): Promise<void> {
   }
   if (cmd === "mcp-snippet") {
     await cmdMcpSnippet(rest);
+    return;
+  }
+  if (cmd === "autostart") {
+    await cmdAutostart(rest);
     return;
   }
   if (cmd === "token") {

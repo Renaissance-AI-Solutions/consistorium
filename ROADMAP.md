@@ -48,6 +48,15 @@ Outsourcerer is future adapter work. The current MVP does not launch it, route t
 - No automatic publishing. The skill produces a **draft** for human review.
 - Tracked here so the idea is not lost while v0.1 stays focused.
 
+### Decision provenance and design lineage (named, not built)
+
+Consistorium is positioned today as persistent memory for coding agents. The direction this section names is one level up: why the project became what it is — cross-agent continuity, handoff history, decision provenance, experiments, lessons, rejected approaches. This extends Consistorium's existing task/handoff records; it is not a rename or a pivot, and nothing here is built.
+
+- **Decision Record:** the decision, the alternatives considered, why the rejected ones were rejected, evidence links, date, decider.
+- **Experiment Record:** the hypothesis, the isolated branch, the benchmark, the retain/reject outcome — including failures.
+- `DESIGN.md:172` (`session-to-content`, lessons-learned with aggressive redaction) already hints at this direction; this section names it.
+- Records would live in the same local continuity store as tasks and handoffs, under the same security boundaries. Consistorium would record experiment outcomes and reference branches; it would not create branches, run benchmarks, or orchestrate the loop (see Not planned).
+
 ### Not planned
 
 Do not expand into:

@@ -10,6 +10,7 @@ import { minimatch } from "minimatch";
 import type { ContextDocSummary, ContextDocContent } from "../core/types.js";
 import { DEFAULT_LIMITS } from "../core/types.js";
 import { isDeniedByPolicy, isBinaryPath, type SecurityPolicy } from "../core/security.js";
+import { truncateBufferToBytes, TRUNCATION_MARKER } from "../core/truncate.js";
 import type { ResolvedProject } from "../core/types.js";
 
 const GLOB_MAGIC = /[*?[\]{}!+@()]/;
@@ -316,12 +317,14 @@ export async function readContextDocument(
   let truncated = false;
   let content: string;
   if (stat.size > maxBytes) {
-    // Read truncated
+    // Read truncated. The cut is made on a character boundary: decoding a
+    // buffer sliced mid-character substitutes U+FFFD, which is three bytes and
+    // would push the payload back over `maxBytes`.
     const fd = await fs.promises.open(canonical, "r");
     try {
       const buf = Buffer.alloc(maxBytes);
       const { bytesRead } = await fd.read(buf, 0, maxBytes, 0);
-      content = buf.subarray(0, bytesRead).toString("utf-8") + "\n... [truncated]";
+      content = truncateBufferToBytes(buf.subarray(0, bytesRead), maxBytes) + TRUNCATION_MARKER;
       truncated = true;
     } finally {
       await fd.close();

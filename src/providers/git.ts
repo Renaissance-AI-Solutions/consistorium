@@ -10,6 +10,7 @@ import * as fs from "node:fs";
 import * as path from "node:path";
 import type { CommitSummary, ChangedFileStat, WorktreeInfo, GitRepoState, FileChange } from "../core/types.js";
 import { DEFAULT_LIMITS } from "../core/types.js";
+import { truncateToBytes, TRUNCATION_MARKER } from "../core/truncate.js";
 
 const execFileAsync = promisify(execFile);
 const NULL_DEVICE = process.platform === "win32" ? "NUL" : "/dev/null";
@@ -451,13 +452,9 @@ export async function getBoundedDiff(
 ): Promise<{ diff: string | null; truncated: boolean }> {
   try {
     const { stdout } = await gitExec(args, { cwd: canonicalPath, maxBuffer: Math.max(maxBytes * 2, 1024 * 1024) });
-    if (Buffer.byteLength(stdout, "utf-8") <= maxBytes) {
-      return { diff: stdout, truncated: false };
-    }
-    // Truncate on char boundary
-    const truncated = Buffer.from(stdout, "utf-8").subarray(0, maxBytes).toString("utf-8");
-    // Avoid cutting in middle of multi-byte char by re-encoding
-    return { diff: truncated + "\n... [truncated]", truncated: true };
+    const { text, truncated } = truncateToBytes(stdout, maxBytes);
+    if (!truncated) return { diff: text, truncated: false };
+    return { diff: text + TRUNCATION_MARKER, truncated: true };
   } catch (e) {
     // If git diff fails (e.g., no commits), return null
     return { diff: null, truncated: false };

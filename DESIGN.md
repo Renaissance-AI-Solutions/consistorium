@@ -77,9 +77,13 @@ Chose: `execFile("git", argsArray)` with an **explicit allowlist** of read-only 
 
 Every provider that can return variable-length data caps it:
 
-- documents: 256 KiB, diffs: 128 KiB, search: 100 hits, commits: 100, untracked preview: 50, file scan per search: 512 KiB max.
+- documents: 256 KiB, diffs: 128 KiB, search: 100 hits, commits: 100, untracked preview: 50, file scan per search: 512 KiB max, search preview: 300 characters including its ellipsis markers.
+
+Byte budgets are cut on a character boundary by `core/truncate.ts`, shared by document reads and git diffs. Slicing UTF-8 at an arbitrary index splits multi-byte characters, and decoding the remainder substitutes U+FFFD — three bytes each — so a naive cut returns *more* bytes than the budget allowed. The truncation marker itself sits outside the budget: it is a fixed-size signal, not payload.
 
 Callers see `truncated: true` and can decide whether to refine the query. This prevents model-context blow-up and DoS.
+
+These bounds are asserted as properties over arbitrary inputs in `src/__tests__/truncation-properties.test.ts`, not only at hand-picked sizes.
 
 ### 3.7 Project snapshot and strategic briefing
 

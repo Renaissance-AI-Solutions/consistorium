@@ -21,6 +21,9 @@ export interface SearchOptions {
   caseSensitive?: boolean;
 }
 
+/** Maximum characters in a search-result preview, ellipsis markers included. */
+const PREVIEW_MAX_CHARS = 300;
+
 const DEFAULT_EXCLUDES = [
   ".git/**",
   "node_modules/**",
@@ -208,12 +211,17 @@ export async function searchInProject(opts: SearchOptions): Promise<SearchRespon
       if (idx !== -1) {
         totalMatches++;
         if (results.length < maxResults) {
-          // Preview: trim and limit to 300 chars
+          // Preview: trim and limit to PREVIEW_MAX_CHARS. The ellipsis markers
+          // are part of that budget, not additions to it.
           let preview = line.trim();
-          if (preview.length > 300) {
+          if (preview.length > PREVIEW_MAX_CHARS) {
             // Center around match if long
             const start = Math.max(0, idx - 80);
-            preview = (start > 0 ? "… " : "") + line.slice(start, start + 300).trim() + (line.length > start + 300 ? " …" : "");
+            const head = start > 0 ? "… " : "";
+            let budget = PREVIEW_MAX_CHARS - head.length;
+            const tail = line.length > start + budget ? " …" : "";
+            budget -= tail.length;
+            preview = head + line.slice(start, start + budget).trim() + tail;
           }
           results.push({
             path: relPosix,

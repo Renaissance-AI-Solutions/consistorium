@@ -79,11 +79,12 @@ Assumptions:
 **Mitigations**:
 
 - Canonicalization via `realpath` with missing-tail handling: longest existing ancestor is realpath'd, then tail is appended lexically. Works for non-existent paths.
+- **Dangling symlinks are followed, not treated as missing components.** `realpath` reports `ENOENT` both for a path component that does not exist and for a symlink whose target does not exist. Conflating the two let a link inside the root that pointed at a not-yet-existing path outside it canonicalize back to `<root>/<link>` and pass containment; creating the target afterwards turned that into a read outside the root. The resolver now `lstat`s first and, on `ENOENT` from `realpath` over a symlink, reads the link and continues resolving from its target. Manual hops are capped (`MAX_SYMLINK_HOPS = 40`) for links the kernel cannot resolve to an `ELOOP`.
 - `SecurityPolicy.isInsideAllowedRoot()` checks separator boundaries (`/a` does not allow `/ab`).
 - `documents.ts` and `search.ts` both walk with `realpath` and skip symlink targets outside the project root and outside allowed roots.
 - `assertInside()` is used where a base directory is known.
 
-**Test coverage**: See `src/__tests__/security.test.ts` — traversal, symlink escape, boundary (`/foo` vs `/foobar`).
+**Test coverage**: See `src/__tests__/security.test.ts` — traversal, symlink escape, boundary (`/foo` vs `/foobar`). See `src/__tests__/security-fuzz.test.ts` for adversarial fixture trees — long symlink chains, escapes mid-chain, detours that land back inside, symlink cycles, `..` applied to symlinked parents (swept over every 4-segment payload combination), case-insensitive filesystem edges, and NFC/NFD normalization collisions. See `src/__tests__/security-regression.test.ts` for the two bypasses that sweep found.
 
 ### 5.3 Shell injection via git
 
@@ -130,7 +131,7 @@ Assumptions:
 - **Denylisting** applies to session artifact discovery as well (same `isDeniedByPolicy`).
 - **Binary skip** applies.
 - **Redaction** in `adapters/session.ts`: regex redaction of `sk-...`, `ghp_...`, `AKIA...`, private-key headers. Best-effort, not a guarantee — docs state this.
-- Search index respects the same denylist; secret-named files (`*secret*`, `*token*`) are excluded from search.
+- Search index respects the same denylist; secret-named files (`*secret*`, `*token*`) are excluded from search. Deny globs match **case-insensitively**: on a case-insensitive filesystem `MY-SECRET.json` and `my-secret.json` are one file, and a case-sensitive deny list served it under the spelling it did not list.
 - Documentation advises users to keep `sessionArtifacts.patterns` narrow and to review artifacts before sharing.
 
 **Not mitigated in v0.1**: Content-scanning of document bodies for secrets; users should not allowlist files that contain secrets.

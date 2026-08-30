@@ -102,12 +102,17 @@ function containsDeniedSegment(canonicalPath: string, projectRoot: string): bool
 function matchesAnyGlob(filePath: string, globs: string[]): boolean {
   // Use minimatch with dot:true and matchBase false — paths are posix-ish.
   // Normalize to posix for glob matching.
+  //
+  // `nocase: true` because these are deny rules: on a case-insensitive
+  // filesystem (macOS default) `MY-SECRET.json` and `my-secret.json` name the
+  // same file, so a case-sensitive match would let the same secret through
+  // under a different spelling. Case-folding a deny list only ever denies more.
   const posix = filePath.split(path.sep).join(path.posix.sep);
   for (const g of globs) {
-    if (minimatch(posix, g, { dot: true, nocase: false })) return true;
+    if (minimatch(posix, g, { dot: true, nocase: true })) return true;
     // Also try basename match for simple globs
     const base = path.posix.basename(posix);
-    if (minimatch(base, g, { dot: true })) return true;
+    if (minimatch(base, g, { dot: true, nocase: true })) return true;
   }
   return false;
 }
@@ -170,6 +175,19 @@ export function isDeniedByPolicy(
 // ---------------------------------------------------------------------------
 // Path containment
 // ---------------------------------------------------------------------------
+
+/**
+ * Cap on dangling-symlink hops followed manually while canonicalizing. The
+ * kernel enforces its own ELOOP limit for links it can resolve; this bounds the
+ * ones it cannot (targets that do not exist yet).
+ */
+const MAX_SYMLINK_HOPS = 40;
+
+/** Re-append a leaf-first tail of missing components to a resolved ancestor. */
+function joinMissingTail(real: string, missing: string[]): string {
+  if (missing.length === 0) return path.normalize(real);
+  return path.normalize(path.join(real, ...[...missing].reverse()));
+}
 
 export class SecurityPolicy {
   private allowedRoots: string[]; // canonical realpaths, normalized, no trailing slash
@@ -266,29 +284,41 @@ export class SecurityPolicy {
     // Walk up until we find an existing ancestor to realpath, then re-append tail.
     let cur = target;
     const missing: string[] = [];
+    let hops = 0;
     while (true) {
+      let stats: fs.Stats;
       try {
-        // lstat to see if exists without following final symlink? But we want to follow.
-        await fs.promises.lstat(cur);
-        // Exists — realpath it
-        const real = await fs.promises.realpath(cur);
-        // Re-append missing tail, normalizing
-        if (missing.length === 0) return path.normalize(real);
-        // missing was collected from leaf up, so reverse
-        missing.reverse();
-        return path.normalize(path.join(real, ...missing));
+        // lstat, so a dangling symlink still registers as "this name exists".
+        stats = await fs.promises.lstat(cur);
       } catch (e: unknown) {
         const err = e as NodeJS.ErrnoException;
-        if (err.code === "ENOENT") {
-          const parent = path.dirname(cur);
-          if (parent === cur) {
-            // Reached root and still missing — return normalized target
-            missing.reverse();
-            // Use lexical normalization only
-            return path.normalize(target);
+        if (err.code !== "ENOENT") throw e;
+        const parent = path.dirname(cur);
+        if (parent === cur) {
+          // Reached the filesystem root and still missing — lexical result only.
+          return path.normalize(target);
+        }
+        missing.push(path.basename(cur));
+        cur = parent;
+        continue;
+      }
+
+      try {
+        const real = await fs.promises.realpath(cur);
+        return joinMissingTail(real, missing);
+      } catch (e: unknown) {
+        const err = e as NodeJS.ErrnoException;
+        // A dangling symlink also reports ENOENT here, but the link itself
+        // exists — its target is simply absent. Treating that as "component
+        // missing" would re-attach the link's own name to its parent's
+        // realpath and report a link pointing outside the root as contained.
+        // Follow the link explicitly and keep resolving from its target.
+        if (err.code === "ENOENT" && stats.isSymbolicLink()) {
+          if (++hops > MAX_SYMLINK_HOPS) {
+            throw new PolicyError(`Too many symbolic links: ${target}`, "PATH_ESCAPE");
           }
-          missing.push(path.basename(cur));
-          cur = parent;
+          const link = await fs.promises.readlink(cur);
+          cur = path.resolve(path.dirname(cur), link);
           continue;
         }
         throw e;
@@ -299,23 +329,34 @@ export class SecurityPolicy {
   private realpathWithMissingTailSync(target: string): string {
     let cur = target;
     const missing: string[] = [];
+    let hops = 0;
     while (true) {
+      let stats: fs.Stats;
       try {
-        fs.lstatSync(cur);
-        const real = fs.realpathSync(cur);
-        if (missing.length === 0) return path.normalize(real);
-        missing.reverse();
-        return path.normalize(path.join(real, ...missing));
+        stats = fs.lstatSync(cur);
       } catch (e: unknown) {
         const err = e as NodeJS.ErrnoException;
-        if (err.code === "ENOENT") {
-          const parent = path.dirname(cur);
-          if (parent === cur) {
-            missing.reverse();
-            return path.normalize(target);
+        if (err.code !== "ENOENT") throw e;
+        const parent = path.dirname(cur);
+        if (parent === cur) return path.normalize(target);
+        missing.push(path.basename(cur));
+        cur = parent;
+        continue;
+      }
+
+      try {
+        const real = fs.realpathSync(cur);
+        return joinMissingTail(real, missing);
+      } catch (e: unknown) {
+        const err = e as NodeJS.ErrnoException;
+        // See the async variant: dangling symlinks must be followed, not
+        // mistaken for a missing path component.
+        if (err.code === "ENOENT" && stats.isSymbolicLink()) {
+          if (++hops > MAX_SYMLINK_HOPS) {
+            throw new PolicyError(`Too many symbolic links: ${target}`, "PATH_ESCAPE");
           }
-          missing.push(path.basename(cur));
-          cur = parent;
+          const link = fs.readlinkSync(cur);
+          cur = path.resolve(path.dirname(cur), link);
           continue;
         }
         throw e;

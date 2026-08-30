@@ -56,6 +56,8 @@ Consistorium is positioned today as persistent memory for coding agents. The dir
 - **Experiment Record:** the hypothesis, the isolated branch, the benchmark, the retain/reject outcome — including failures.
 - `DESIGN.md:172` (`session-to-content`, lessons-learned with aggressive redaction) already hints at this direction; this section names it.
 - Records would live in the same local continuity store as tasks and handoffs, under the same security boundaries. Consistorium would record experiment outcomes and reference branches; it would not create branches, run benchmarks, or orchestrate the loop (see Not planned).
+- **Disagreement / resolution history (additive 2026-08-30):** what objections were raised, and why the winning argument won. Downstream of Cursus challenger/arbiter records — Cursus is the gate; Consistorium keeps the why. Still named, not built.
+- **Per-task model execution attribution (additive 2026-08-30):** preserve references to Cursus Execution Attribution records (model id ≠ agent/principal id). Consistorium records provenance; it does not route models. Still named, not built.
 
 ### Not planned
 

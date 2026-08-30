@@ -19,7 +19,6 @@ This roadmap separates **working now** from **designed for later**. Nothing list
 
 ## Next (hardening, no scope creep)
 
-- Fuzz path containment with adversarial fixture trees (long symlink chains, case-insensitive fs edges, unicode normalization)
 - Property-based tests for truncation invariants
 - Optional `includeIgnored` / `excludeGlobs` flags on search (already internal, just not exposed as MCP args yet)
 - Per-project limit profiles beyond the current global bounded config

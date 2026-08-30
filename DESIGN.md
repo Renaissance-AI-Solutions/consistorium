@@ -238,6 +238,7 @@ If the published spec evolves, `plugin.json` / `mcp.json` are the only files tha
 | Worktree ahead/behind | `rev-list --left-right --count HEAD...@{u}` when upstream exists | Safely derivable locally without network; null when no upstream |
 | Diff inclusion | Off by default; bounded and `truncated` when on | Prevents context-window abuse |
 | Search semantics | Plain-text, not regex/semantic, bounded per file | Sufficient for v0.1; regex can be added later without breaking change |
+| Search file filter | `excludeGlobs` adds skips; `includeIgnored` drops only the build-output defaults (`dist/`, `build/`, `.next/`, `coverage/`, `*.min.js`, `*.bundle.js`) | Callers occasionally need generated files; the flags cannot reach secrets, `.env`, `.git`, `node_modules` or binaries, which are denied in the walk by `isDeniedByPolicy` rather than by this filter |
 | Secret redaction | Best-effort regex (`sk-`, `ghp_`, `AKIA`, private key header) | Documented as not exhaustive; denylist remains the primary control |
 | Multi-project vs single | `projects: []` list; `findProjectByPath` picks longest prefix | Supports devs with multiple concurrent repos, a core thesis |
 | Spaces/special chars in paths | `execFile` arg arrays preserve them; no shell quoting needed | Tested with synthetic repos containing spaces |

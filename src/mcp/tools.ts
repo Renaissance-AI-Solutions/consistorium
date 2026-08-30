@@ -46,12 +46,13 @@ export const MCP_SERVER_INSTRUCTIONS =
 
 // We produce draft 2020-12-ish schemas. MCP SDK expects JSON Schema object.
 
-function mkSchema(shape: Record<string, { type: string; description?: string; required?: boolean; enum?: string[]; default?: unknown }>, required: string[] = []): Record<string, unknown> {
+function mkSchema(shape: Record<string, { type: string; description?: string; required?: boolean; enum?: string[]; default?: unknown; items?: unknown }>, required: string[] = []): Record<string, unknown> {
   const properties: Record<string, unknown> = {};
   for (const [k, v] of Object.entries(shape)) {
     const prop: Record<string, unknown> = { type: v.type };
     if (v.description) prop.description = v.description;
     if (v.enum) prop.enum = v.enum;
+    if (v.items !== undefined) prop.items = v.items;
     if (v.default !== undefined) prop.default = v.default;
     properties[k] = prop;
   }
@@ -306,6 +307,17 @@ export const TOOL_DEFS: ToolDef[] = [
         query: { type: "string", description: "Search string (plain text, 1-500 chars)" },
         maxResults: { type: "number", description: "Max results (1-100, default 50)" },
         caseSensitive: { type: "boolean", description: "Case-sensitive search (default false)" },
+        excludeGlobs: {
+          type: "array",
+          items: { type: "string" },
+          description:
+            "Additional root-relative globs to skip, applied on top of the default exclusions (max 50, 200 chars each)",
+        },
+        includeIgnored: {
+          type: "boolean",
+          description:
+            "Search build output normally skipped by convenience (dist/, build/, .next/, coverage/, *.min.js, *.bundle.js). Default false. Security exclusions are unaffected: secrets, .env, .git, node_modules and binaries stay denied.",
+        },
       },
       ["project", "query"]
     ),

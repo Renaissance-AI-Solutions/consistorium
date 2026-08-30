@@ -19,6 +19,13 @@ export interface SearchOptions {
   includeGlobs?: string[]; // optional filter on relative paths
   excludeGlobs?: string[]; // additional excludes
   caseSensitive?: boolean;
+  /**
+   * Skip the DEFAULT_EXCLUDES convenience filter (build output, minified
+   * bundles) so generated files are searchable. Security exclusions are
+   * enforced in `walkFiles` via `isDeniedByPolicy` and are unaffected: .git,
+   * node_modules, secret-shaped names and binaries stay denied either way.
+   */
+  includeIgnored?: boolean;
 }
 
 /** Maximum characters in a search-result preview, ellipsis markers included. */
@@ -149,8 +156,12 @@ export async function searchInProject(opts: SearchOptions): Promise<SearchRespon
   let totalMatches = 0;
   let truncated = false;
 
-  // Prepare include/exclude filters (relative posix globs)
-  const excludes = [...DEFAULT_EXCLUDES, ...(opts.excludeGlobs ?? [])];
+  // Prepare include/exclude filters (relative posix globs). `includeIgnored`
+  // drops only the convenience defaults; caller-supplied excludes still apply.
+  const excludes = [
+    ...(opts.includeIgnored ? [] : DEFAULT_EXCLUDES),
+    ...(opts.excludeGlobs ?? []),
+  ];
 
   for await (const absPath of walkFiles(
     opts.project.canonicalPath,

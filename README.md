@@ -98,7 +98,7 @@ not callable, use **Prompt C** before deleting anything or rotating a key.
 | `context_project_snapshot` | Live repo/worktree/session detail |
 | `context_list_worktrees` / `context_worktree_snapshot` | Parallel worktrees and multi-agent activity |
 | `context_recent_changes` / `context_compare` | History and branch divergence |
-| `context_search` | Bounded text search across allowlisted roots |
+| `context_search` | Bounded text search across allowlisted roots; optional `excludeGlobs` and `includeIgnored` narrow or widen the file filter without relaxing secret exclusions |
 | `context_read_context_document` | Read only explicitly allowlisted documents |
 | `context_task_*` / `context_handoff_*` | Durable task records and structured agent handoffs |
 

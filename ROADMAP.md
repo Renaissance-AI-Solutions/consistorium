@@ -19,7 +19,6 @@ This roadmap separates **working now** from **designed for later**. Nothing list
 
 ## Next (hardening, no scope creep)
 
-- Optional `includeIgnored` / `excludeGlobs` flags on search (already internal, just not exposed as MCP args yet)
 - Per-project limit profiles beyond the current global bounded config
 - Broader `plugin.json` / `mcp.json` schema validation inside `doctor`
 

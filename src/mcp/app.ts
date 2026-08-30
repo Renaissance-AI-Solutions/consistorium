@@ -109,6 +109,25 @@ function toMcpError(e: unknown): { code: string; message: string; details?: unkn
   };
 }
 
+/**
+ * `context_search` arguments.
+ *
+ * Both filter flags default to today's behavior, so a caller that sends
+ * neither gets the results it got before they existed. The bounds on
+ * `excludeGlobs` keep a caller from handing minimatch an unbounded pattern
+ * set to evaluate against every walked file.
+ */
+const SearchInputSchema = z
+  .object({
+    project: z.string().trim().min(1).max(200),
+    query: z.string().min(1).max(500),
+    maxResults: z.number().int().min(1).max(500).optional(),
+    caseSensitive: z.boolean().optional(),
+    excludeGlobs: z.array(z.string().trim().min(1).max(200)).max(50).default([]),
+    includeIgnored: z.boolean().default(false),
+  })
+  .strict();
+
 function parseArgs<T extends z.ZodTypeAny>(schema: T, raw: Record<string, unknown>): z.infer<T> {
   const result = schema.safeParse(raw);
   if (result.success) return result.data as z.infer<T>;
@@ -289,11 +308,13 @@ export async function dispatchTool(
     }
 
     case "context_search": {
-      const project = requiredString(args, "project");
-      const query = requiredString(args, "query");
-      const maxResults = optionalInteger(args, "maxResults", 1, 500);
-      const caseSensitive = optionalBoolean(args, "caseSensitive");
-      const res = await service.search(project, query, { maxResults, caseSensitive });
+      const input = parseArgs(SearchInputSchema, args);
+      const res = await service.search(input.project, input.query, {
+        maxResults: input.maxResults,
+        caseSensitive: input.caseSensitive,
+        excludeGlobs: input.excludeGlobs,
+        includeIgnored: input.includeIgnored,
+      });
       return ok(res);
     }
 

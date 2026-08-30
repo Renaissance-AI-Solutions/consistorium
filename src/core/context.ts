@@ -393,7 +393,13 @@ export class ContextService {
   async search(
     projectName: string,
     query: string,
-    opts?: { maxResults?: number; caseSensitive?: boolean; includeGlobs?: string[] }
+    opts?: {
+      maxResults?: number;
+      caseSensitive?: boolean;
+      includeGlobs?: string[];
+      excludeGlobs?: string[];
+      includeIgnored?: boolean;
+    }
   ): Promise<SearchResponse> {
     const project = this.config.projects.find((p) => p.name === projectName);
     if (!project) throw Object.assign(new Error(`Project not found: ${projectName}`), { code: "NOT_FOUND" });
@@ -405,6 +411,8 @@ export class ContextService {
       maxFileSizeBytes: this.config.search.maxFileSizeBytes,
       caseSensitive: opts?.caseSensitive,
       includeGlobs: opts?.includeGlobs,
+      excludeGlobs: opts?.excludeGlobs,
+      includeIgnored: opts?.includeIgnored,
     });
   }
 

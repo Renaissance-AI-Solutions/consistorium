@@ -7,6 +7,19 @@ Branch: `overnight/hardening-20260830`, worktree `/Users/ty/dev/Context-Bridge-h
 Scope was three items from `ROADMAP.md` §Next, in order, one commit per item.
 All three are done and `npm run release:check` passes on the final state.
 
+## Post-review fix (2026-08-30, after the initial report)
+
+Review found one remaining bound violation this report missed: when
+`stat.size <= maxBytes`, `readContextDocument` took a plain UTF-8 decode,
+so invalid bytes inflated the payload — a 1-byte `0xff` file with
+`maxBytes: 1` returned 3 bytes (U+FFFD), over budget. Fixed in `7ac8667`:
+the fits path now reads bytes and decodes through the same
+`truncateBufferToBytes` budget pass as the truncated path. Regression
+added for invalid bytes at the budget (`truncated` stays `false`) and
+above it (payload bounded; marker outside the budget per the documented
+contract; `truncated` true). Failing test written first. Suite is now
+**189 tests / 18 files, all green**; `npm run release:check` passes.
+
 ## Test counts
 
 | Stage | Files | Tests |

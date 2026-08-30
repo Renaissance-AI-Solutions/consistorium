@@ -15,14 +15,15 @@ All three are done and `npm run release:check` passes on the final state.
 | After item 1 | 15 | 151 |
 | After item 2 | 16 | 163 |
 | After item 3 | 17 | 177 |
+| After stretch | 18 | 188 |
 
 All green at every stage. Final gate:
 
 ```
 npm run release:check
   build + typecheck + lint clean
-  Test Files 17 passed (17)
-  Tests 177 passed (177)
+  Test Files 18 passed (18)
+  Tests 188 passed (188)
   release package check: v0.4.0, 78 files, docs/links/binaries present
 ```
 
@@ -34,10 +35,13 @@ npm run release:check
 | `12a1c10` | `test(security): fuzz path containment with adversarial fixture trees` |
 | `6814b88` | `test(bounds): property-based truncation invariants, and fix three bounds` |
 | `67ee83c` | `feat(mcp): expose includeIgnored and excludeGlobs as search args` |
+| `50953df` | `docs: overnight hardening report for 2026-08-30` |
+| `582c400` | `test(security): fixture classes for length boundaries and re-checks` (stretch) |
 
 Four commits for three items: the item-1 fixtures exposed two real containment
 bugs, which landed as their own commit ahead of the fixture suite so the fix is
-reviewable on its own.
+reviewable on its own. The stretch commit was taken only after all three items
+and `release:check` were green.
 
 ## Item 1 — fuzz path containment with adversarial fixture trees
 
@@ -185,6 +189,30 @@ Evidence: 9 failed / 5 passed pre-implementation — the 5 passing were the
 baseline-preserving cases (default behavior unchanged, security invariant already
 held); 14 passed post-implementation.
 
+## Stretch — length boundaries and re-check classes
+
+Taken only after the three items and `release:check` were green.
+`src/__tests__/security-fuzz-depth.test.ts` (11 tests), plus `THREAT_MODEL.md` §5.2.
+
+- **Length boundaries**: a file at the bottom of a 300-level tree; a symlink escape
+  planted at depth 250; lexical paths ~800 segments past `PATH_MAX`, contained and
+  escaping; a component at `NAME_MAX` (255) and one past it, where `ENAMETOOLONG`
+  must not read as "missing, therefore inside"; a 200-deep `..` chain climbing above
+  the root.
+- **Re-checks after the tree changes** (TOCTOU-adjacent, deterministic): a link
+  repointed outside after being accepted is rejected; one repointed inside after
+  being rejected is accepted, so there is no stale negative either; a pending path
+  that becomes an escaping symlink is rejected; a directory replaced by an escaping
+  symlink is rejected; sync and async resolvers agree across the swap. These guard
+  against a cache being added later without noticing that a verdict would then
+  outlive the filesystem that justified it.
+
+**These found no bugs** — they characterize behavior that is already correct. Because
+a test that has never failed proves nothing, their teeth were checked by mutation:
+forcing `isInsideAllowedRoot` to return `true` fails 7 of the 11. The remaining 4
+assert positive containment ("must not over-deny"), which that mutation cannot break
+by construction.
+
 ## Docs touched
 
 - `THREAT_MODEL.md` §5.2, §5.5 — both containment bugs and the new resolver
@@ -207,11 +235,11 @@ held); 14 passed post-implementation.
   exercise NFC/NFD collision; on a non-normalizing filesystem they return early.
   They were only ever executed against macOS/APFS in this window, so the
   non-normalizing branch is untested in practice.
-- **TOCTOU is out of reach for these fixtures.** Every case here is a static tree
-  built before the check. A path swapped between `realpath` and the subsequent read
-  is not deterministically testable without injecting a seam into the resolver, so
-  no such test was written and no claim about TOCTOU resistance should be read into
-  this suite.
+- **Concurrent TOCTOU remains out of reach.** The stretch commit covers the
+  deterministic half — sequential swaps, proving the resolver holds no stale
+  verdict — but a swap racing a single `realpath` call is not testable without a
+  seam in the resolver. No test in this branch should be read as a claim of
+  resistance to it; `THREAT_MODEL.md` §5.2 now says so explicitly.
 - **`getBoundedDiff` swallows all git failures as `{ diff: null }`.** Unchanged by
   this work and out of scope, but it means a truncation property cannot distinguish
   "no diff" from "git errored"; the properties skip on `null` rather than asserting.

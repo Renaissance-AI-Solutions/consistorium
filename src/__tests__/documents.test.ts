@@ -115,6 +115,27 @@ describe("documents provider", () => {
     await expect(readContextDocument(binaryProj, policy, "docs/binary.png")).rejects.toThrow(/Denied|Binary/);
   });
 
+  it("holds the byte budget for invalid UTF-8, both at and above the budget", async () => {
+    // Regression: a file that fits by stat.size took the plain utf-8 decode,
+    // where each invalid byte becomes U+FFFD (3 bytes) and blew the budget.
+    const bad = path.join(repo, "docs", "bad.md");
+
+    // One invalid byte, budget 1: stat.size fits, payload must not exceed 1 byte.
+    await fs.promises.writeFile(bad, Buffer.from([0xff]));
+    const one = await readContextDocument(project, policy, "docs/bad.md", { maxBytes: 1 });
+    expect(Buffer.byteLength(one.content, "utf-8")).toBeLessThanOrEqual(1);
+    expect(one.truncated).toBe(false); // nothing was cut for size; the file fits
+
+    // Many invalid bytes over the budget: payload stays bounded (the fixed
+    // truncation marker is documented as outside the budget, like other
+    // bounded results), and the result is marked truncated.
+    await fs.promises.writeFile(bad, Buffer.alloc(64, 0xff));
+    const many = await readContextDocument(project, policy, "docs/bad.md", { maxBytes: 16 });
+    expect(many.content).toContain("[truncated]");
+    expect(Buffer.byteLength(many.content.replace(/\n\.\.\. \[truncated\]$/, ""), "utf-8")).toBeLessThanOrEqual(16);
+    expect(many.truncated).toBe(true);
+  });
+
   it("does not overflow the stack or scan the whole tree on a huge project", async () => {
     // Regression: discovery used to walk every file in the project and then
     // `results.push(...sub)`, which throws RangeError once a single directory

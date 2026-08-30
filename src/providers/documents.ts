@@ -316,21 +316,27 @@ export async function readContextDocument(
 
   let truncated = false;
   let content: string;
-  if (stat.size > maxBytes) {
-    // Read truncated. The cut is made on a character boundary: decoding a
-    // buffer sliced mid-character substitutes U+FFFD, which is three bytes and
-    // would push the payload back over `maxBytes`.
-    const fd = await fs.promises.open(canonical, "r");
-    try {
+  const fd = await fs.promises.open(canonical, "r");
+  try {
+    if (stat.size > maxBytes) {
+      // Read truncated. The cut is made on a character boundary: decoding a
+      // buffer sliced mid-character substitutes U+FFFD, which is three bytes and
+      // would push the payload back over `maxBytes`.
       const buf = Buffer.alloc(maxBytes);
       const { bytesRead } = await fd.read(buf, 0, maxBytes, 0);
       content = truncateBufferToBytes(buf.subarray(0, bytesRead), maxBytes) + TRUNCATION_MARKER;
       truncated = true;
-    } finally {
-      await fd.close();
+    } else {
+      // Even when the file fits by stat.size, a plain utf-8 decode can grow the
+      // payload: each invalid byte becomes U+FFFD (three bytes), so a 1-byte
+      // file of 0xff decoded to 3 bytes. Decode through the same budget-safe
+      // path; well-formed files pass through unchanged and are not truncated.
+      const buf = Buffer.alloc(stat.size);
+      const { bytesRead } = await fd.read(buf, 0, stat.size, 0);
+      content = truncateBufferToBytes(buf.subarray(0, bytesRead), maxBytes);
     }
-  } else {
-    content = await fs.promises.readFile(canonical, "utf-8");
+  } finally {
+    await fd.close();
   }
 
   return {

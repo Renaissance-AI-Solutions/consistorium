@@ -3,6 +3,8 @@
  * Consistorium CLI — init, config validation, and helpers.
  */
 import * as fs from "node:fs";
+import { fileURLToPath } from "node:url";
+import { checkPluginManifests } from "./manifests.js";
 import * as path from "node:path";
 import * as os from "node:os";
 import * as readline from "node:readline";
@@ -29,7 +31,7 @@ Commands:
   serve                 Start MCP stdio server (default)
   serve --read-only     Start MCP stdio without task/handoff write tools
   serve --http          Start ChatGPT-compatible Streamable HTTP on /mcp
-  doctor                Check config, state dir, and smoke a project briefing
+  doctor                Validate plugin/MCP manifests, config, and a project briefing
   mcp-snippet           Print a ready-to-paste MCP registration for a client
   autostart             Install/remove a per-user launcher for the tunnel runtime
   token                 Generate a bearer token for the HTTP transport
@@ -670,6 +672,17 @@ async function cmdServe(args: string[]): Promise<void> {
 }
 
 async function cmdDoctor(args: string[]): Promise<void> {
+  const packageRoot = fileURLToPath(new URL("../../", import.meta.url));
+  const manifestChecks = checkPluginManifests(packageRoot);
+  for (const check of manifestChecks) {
+    if (check.errors.length === 0) console.log(`✓ ${check.file}: Agent Plugins 1.0.0 schema`);
+    else for (const error of check.errors) console.error(`✗ ${check.file}: ${error}`);
+  }
+  if (manifestChecks.some((check) => check.errors.length > 0)) {
+    process.exitCode = 1;
+    return;
+  }
+
   let configPath: string | undefined;
   for (let i = 0; i < args.length; i++) {
     if ((args[i] === "--config" || args[i] === "-c") && args[i + 1]) configPath = args[++i];

@@ -179,7 +179,7 @@ export class SecurityPolicy {
     this.allowedRoots = allowedRoots.map((r) => {
       let canon: string;
       try {
-        canon = fs.realpathSync(r);
+        canon = fs.realpathSync.native(r);
       } catch {
         canon = path.normalize(r);
       }
@@ -246,7 +246,7 @@ export class SecurityPolicy {
     for (const root of this.allowedRoots) {
       if (norm === root) return true;
       // Ensure separator boundary: /a/b is inside /a, but /a-b is not
-      if (norm.startsWith(root + path.sep)) return true;
+      if (norm.startsWith(root.endsWith(path.sep) ? root : root + path.sep)) return true;
     }
     return false;
   }
@@ -257,7 +257,7 @@ export class SecurityPolicy {
   assertInside(candidateCanonical: string, baseCanonical: string, label = "path"): void {
     const cand = path.normalize(candidateCanonical).replace(/\/+$/, "") || "/";
     const base = path.normalize(baseCanonical).replace(/\/+$/, "") || "/";
-    if (cand !== base && !cand.startsWith(base + path.sep)) {
+    if (cand !== base && !cand.startsWith(base.endsWith(path.sep) ? base : base + path.sep)) {
       throw new PolicyError(`${label} escapes base: ${candidateCanonical} not inside ${baseCanonical}`, "PATH_ESCAPE");
     }
   }
@@ -267,9 +267,11 @@ export class SecurityPolicy {
     let cur = target;
     const missing: string[] = [];
     while (true) {
+      let exists = false;
       try {
         // lstat to see if exists without following final symlink? But we want to follow.
         await fs.promises.lstat(cur);
+        exists = true;
         // Exists — realpath it
         const real = await fs.promises.realpath(cur);
         // Re-append missing tail, normalizing
@@ -279,7 +281,8 @@ export class SecurityPolicy {
         return path.normalize(path.join(real, ...missing));
       } catch (e: unknown) {
         const err = e as NodeJS.ErrnoException;
-        if (err.code === "ENOENT") {
+        // Only an absent entry is a missing tail. A dangling symlink must fail closed.
+        if (err.code === "ENOENT" && !exists) {
           const parent = path.dirname(cur);
           if (parent === cur) {
             // Reached root and still missing — return normalized target
@@ -300,15 +303,18 @@ export class SecurityPolicy {
     let cur = target;
     const missing: string[] = [];
     while (true) {
+      let exists = false;
       try {
         fs.lstatSync(cur);
-        const real = fs.realpathSync(cur);
+        exists = true;
+        const real = fs.realpathSync.native(cur);
         if (missing.length === 0) return path.normalize(real);
         missing.reverse();
         return path.normalize(path.join(real, ...missing));
       } catch (e: unknown) {
         const err = e as NodeJS.ErrnoException;
-        if (err.code === "ENOENT") {
+        // Only an absent entry is a missing tail. A dangling symlink must fail closed.
+        if (err.code === "ENOENT" && !exists) {
           const parent = path.dirname(cur);
           if (parent === cur) {
             missing.reverse();

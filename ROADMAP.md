@@ -15,15 +15,13 @@ This roadmap separates **working now** from **designed for later**. Nothing list
 - Skill: `project-state` (project → briefing → task/handoff detail → direct verification)
 - HTTP: loopback Streamable HTTP at `/mcp`, bearer token, read-only by default, Host-header check
 - Tests: security, config, git, documents, search, sessions, MCP, continuity, briefing, HTTP auth, and Agent A/B + Streamable HTTP e2e on synthetic tmp fixtures
+- Hardening: seeded adversarial containment fixtures (symlink chains, dangling links, case/Unicode aliases), generated UTF-8 truncation properties, and offline Agent Plugins 1.0.0 manifest schema checks in `doctor`
 - Tooling/docs: ESLint 9 flat config, README, THREAT_MODEL, DESIGN, SECURITY, CONTRIBUTING, LICENSE, example config, and Hermes CLI setup
 
 ## Next (hardening, no scope creep)
 
-- Fuzz path containment with adversarial fixture trees (long symlink chains, case-insensitive fs edges, unicode normalization)
-- Property-based tests for truncation invariants
 - Optional `includeIgnored` / `excludeGlobs` flags on search (already internal, just not exposed as MCP args yet)
 - Per-project limit profiles beyond the current global bounded config
-- Broader `plugin.json` / `mcp.json` schema validation inside `doctor`
 
 ## Later (designed, not committed)
 

@@ -1,3 +1,4 @@
+import { decodeUtf8Prefix } from "../core/utf8.js";
 /**
  * Git provider — read-only git inspection via allowlisted spawn/execFile.
  *
@@ -454,9 +455,8 @@ export async function getBoundedDiff(
     if (Buffer.byteLength(stdout, "utf-8") <= maxBytes) {
       return { diff: stdout, truncated: false };
     }
-    // Truncate on char boundary
-    const truncated = Buffer.from(stdout, "utf-8").subarray(0, maxBytes).toString("utf-8");
-    // Avoid cutting in middle of multi-byte char by re-encoding
+    // Keep only complete UTF-8 code points within the byte budget.
+    const truncated = decodeUtf8Prefix(Buffer.from(stdout, "utf-8").subarray(0, maxBytes));
     return { diff: truncated + "\n... [truncated]", truncated: true };
   } catch (e) {
     // If git diff fails (e.g., no commits), return null

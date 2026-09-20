@@ -94,6 +94,12 @@ To re-run safely against an existing config, add `--force`.
 consistorium doctor
 ```
 
+`doctor` first validates the installed package's `plugin.json` and `mcp.json`
+against offline equivalents of the Agent Plugins 1.0.0 JSON schemas, then checks
+configuration and builds a smoke briefing. Manifest errors report file and field
+paths and return a nonzero exit status. These are structural checks; they do not
+launch declared servers or validate endpoint connectivity or expanded paths.
+
 Doctor checks your config, state directory, and runs a live smoke briefing against each allowlisted project. Fix anything it reports before connecting a client.
 
 ## 4. Connect your MCP client

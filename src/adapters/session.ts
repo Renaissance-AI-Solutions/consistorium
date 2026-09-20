@@ -8,6 +8,7 @@
  * Future adapters (Codex, Claude Code, etc.) implement the same interface.
  */
 import * as fs from "node:fs";
+import { decodeUtf8Prefix } from "../core/utf8.js";
 import * as path from "node:path";
 import { minimatch } from "minimatch";
 import type { SessionSummary, SessionSnapshot, ResolvedConfig, ResolvedProject } from "../core/types.js";
@@ -266,7 +267,9 @@ export class GenericSessionAdapter implements SessionAdapter {
         try {
           const buf = Buffer.alloc(maxRead);
           const { bytesRead } = await fd.read(buf, 0, maxRead, 0);
-          content = buf.subarray(0, bytesRead).toString("utf-8");
+          content = stat.size > maxRead
+            ? decodeUtf8Prefix(buf.subarray(0, bytesRead))
+            : buf.subarray(0, bytesRead).toString("utf-8");
         } finally {
           await fd.close();
         }
@@ -338,7 +341,8 @@ export class GenericSessionAdapter implements SessionAdapter {
       try {
         const buf = Buffer.alloc(toRead);
         const { bytesRead } = await fd.read(buf, 0, toRead, 0);
-        rawPreview = redactSecrets(buf.subarray(0, bytesRead).toString("utf-8"));
+        const bytes = buf.subarray(0, bytesRead);
+        rawPreview = redactSecrets(truncated ? decodeUtf8Prefix(bytes) : bytes.toString("utf-8"));
         if (truncated) rawPreview += "\n... [truncated]";
       } finally {
         await fd.close();

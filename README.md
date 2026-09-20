@@ -36,7 +36,7 @@ npm install -g consistorium
 
 # Allowlist a project (this is the only thing the server can ever inspect)
 consistorium init --path ~/dev/my-project --name my-project --yes
-consistorium doctor        # verifies config + smokes a live briefing
+consistorium doctor        # validates manifests/config + smokes a live briefing
 ```
 
 `init` prints a ready-to-paste `mcpServers` snippet (with your absolute config path) and the

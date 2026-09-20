@@ -4,6 +4,7 @@ import * as path from "node:path";
 import { mkdtemp, cleanup } from "./helpers.js";
 import { SecurityPolicy } from "../core/security.js";
 import { GenericSessionAdapter } from "../adapters/session.js";
+import { DEFAULT_LIMITS } from "../core/types.js";
 import type { ResolvedConfig } from "../core/types.js";
 
 describe("session adapter (generic)", () => {
@@ -86,6 +87,27 @@ describe("session adapter (generic)", () => {
     expect(snap).not.toBeNull();
     expect(snap!.rawPreview).toBeTruthy();
     expect(snap!.id).toBe(id);
+  });
+
+  it("keeps complete UTF-8 prefixes at the snapshot byte boundary", async () => {
+    const root = config.projects[0]!.canonicalPath;
+    const adapter = new GenericSessionAdapter();
+    const budget = DEFAULT_LIMITS.maxFileSizeBytes;
+    for (const point of ["é", "界", "😀"]) {
+      const width = Buffer.byteLength(point);
+      for (let remaining = 0; remaining <= width; remaining++) {
+        const padding = " ".repeat(budget - remaining);
+        const text = padding + point;
+        await fs.promises.writeFile(path.join(root, "reports", "boundary.md"), text);
+        const snapshot = await adapter.getSessionSnapshot(config, policy, "proj:reports/boundary.md");
+        expect(snapshot).not.toBeNull();
+        const truncated = remaining < width;
+        expect(snapshot!.truncated).toBe(truncated);
+        const expected = truncated ? padding + "\n... [truncated]" : text;
+        // Compare as a boolean to avoid constructing a huge whitespace diff on failure.
+        expect(snapshot!.rawPreview === expected).toBe(true);
+      }
+    }
   });
 
   it("returns null for unknown session id", async () => {

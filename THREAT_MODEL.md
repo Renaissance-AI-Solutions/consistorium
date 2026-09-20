@@ -115,7 +115,7 @@ Assumptions:
 **Mitigations**:
 
 - **Bounded reads**: `maxFileSizeBytes` (256 KiB), `maxDiffBytes` (128 KiB), `maxSearchResults` (100), `maxSearchFileSizeBytes` (512 KiB) defaults; all tools enforce caps and set `truncated: true` when exceeded.
-- **Diff truncation**: `getBoundedDiff` slices on byte boundary and appends notice.
+- **UTF-8 truncation**: bounded document, diff, and session reads omit incomplete trailing code points. Payloads keep their byte budget; the appended truncation notice is outside that budget.
 - **Search previews**: Single-line preview per hit, 300-char cap, one hit per line.
 - **Untracked preview cap**: 50 files per worktree.
 - **Commits cap**: 100 max.

@@ -1,3 +1,4 @@
+import { decodeUtf8Prefix } from "../core/utf8.js";
 /**
  * Project context document provider — discovers/searches/reads allowlisted docs.
  *
@@ -321,7 +322,7 @@ export async function readContextDocument(
     try {
       const buf = Buffer.alloc(maxBytes);
       const { bytesRead } = await fd.read(buf, 0, maxBytes, 0);
-      content = buf.subarray(0, bytesRead).toString("utf-8") + "\n... [truncated]";
+      content = decodeUtf8Prefix(buf.subarray(0, bytesRead)) + "\n... [truncated]";
       truncated = true;
     } finally {
       await fd.close();
